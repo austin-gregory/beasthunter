@@ -69,7 +69,7 @@ export default class Player extends Phaser.GameObjects.Sprite {
         this.shootLockUntil = 0;
 
         // Player nickname text
-        this.playerNickname = this.scene.add.text((this.x - this.width * 1.4), (this.y - (this.height / 2)), this.scene.playerName || "Player");
+        this.playerNickname = this.scene.add.text((this.x - this.width * 1.4), (this.y - (this.height / 2) - 30), this.scene.playerName || "Player");
 
         // Interaction key (combat uses SPACE)
         this.interactKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
@@ -234,13 +234,26 @@ export default class Player extends Phaser.GameObjects.Sprite {
             if ((this.y >= world.y && this.y <= (world.y + world.height)) && (this.x >= world.x && this.x <= (world.x + world.width))) {
                 console.log('Player is by world entry: ' + world.name);
 
+                const props = Array.isArray(world.properties) ? world.properties : [];
+                const mapKeys = new Set(this.scene.cache.tilemap.getKeys());
+
                 // Get playerTexturePosition from from Worlds object property
-                let playerTexturePosition;
-                if (world.properties) playerTexturePosition = world.properties.find((property) => property.name === 'playerTexturePosition');
+                const playerTexturePosition = props.find((property) => property.name === "playerTexturePosition");
                 if (playerTexturePosition) this.playerTexturePosition = playerTexturePosition.value;
 
+                const mapByName = props.find((property) => mapKeys.has(property.name));
+                const mapByValue = props.find((property) => mapKeys.has(property.value));
+                const targetProp = props.find((property) => (
+                    property.name === "targetMap" || property.name === "map" || property.name === "world"
+                ));
+                const targetMap = (mapByName && mapByName.name)
+                    || (mapByValue && mapByValue.value)
+                    || (targetProp && targetProp.value)
+                    || world.name;
+                if (!targetMap) return;
+
                 // Load new level (tiles map)
-                this.changeMap(world.name, this.playerTexturePosition);
+                this.changeMap(targetMap, this.playerTexturePosition);
             }
         });
     }

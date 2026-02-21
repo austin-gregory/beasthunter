@@ -10,6 +10,11 @@
 - [ ] Pokémons added
 - [ ] Can going inside building (In progress)
 
+### Scoring And Beasts
+- Outside beasts are shown as colored circles: wolf = gray, tiger = orange, spider = purple.
+- Cash-in: if you are in a safe zone with all three tamed beasts, you gain 100 points and your tamed beasts respawn.
+- Boss spider (inside buildings) gives 100 points to the player whose tamed beast finishes it.
+
 ### How to install
 ```
 // Clone this repository

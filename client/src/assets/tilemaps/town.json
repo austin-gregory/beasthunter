@@ -170,6 +170,11 @@
                          "name":"route1",
                          "type":"string",
                          "value":"r1"
+                        },
+                        {
+                         "name":"fromMap",
+                         "type":"string",
+                         "value":"interior_door_a"
                         }],
                  "rotation":0,
                  "type":"",
@@ -188,6 +193,11 @@
                          "name":"route2",
                          "type":"string",
                          "value":"r2"
+                        },
+                        {
+                         "name":"fromMap",
+                         "type":"string",
+                         "value":"interior_door_b"
                         }],
                  "rotation":0,
                  "type":"",

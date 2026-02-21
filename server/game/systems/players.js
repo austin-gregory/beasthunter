@@ -1,9 +1,13 @@
 const { PLAYER_MAX_HP, PLAYER_MAX_AMMO } = require("../constants");
-const { isInAnySafe } = require("../state");
+const { isInAnySafe, killPlayer } = require("../state");
 
 function updatePlayers(state, dt) {
     for (const p of Object.values(state.players)) {
         if (p.dead) continue;
+        if (p.hp <= 0) {
+            killPlayer(state, p);
+            continue;
+        }
 
         if (isInAnySafe(p.map, p.x, p.y)) {
             p.ammo = PLAYER_MAX_AMMO;

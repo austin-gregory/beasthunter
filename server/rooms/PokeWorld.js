@@ -10,7 +10,8 @@ const { createState, allocateSlot, spawnBeasts, spawnBosses, releasePlayerTames 
 const { getReloadSpawn, getFallbackSpawn } = require("../game/maps");
 const { updatePlayers } = require("../game/systems/players");
 const { updateBeasts } = require("../game/systems/beasts");
-const { simulateArrows } = require("../game/systems/projectiles");
+const { updateBosses } = require("../game/systems/bosses");
+const { simulateArrows, simulateBossShots } = require("../game/systems/projectiles");
 const { tryCashIn } = require("../game/systems/score");
 const { sendGameState } = require("../game/net");
 
@@ -82,7 +83,9 @@ exports.PokeWorld = class extends colyseus.Room {
     simulate(dt) {
         updatePlayers(this.gameState, dt);
         updateBeasts(this.gameState, dt);
+        updateBosses(this.gameState, dt);
         simulateArrows(this.gameState, dt);
+        simulateBossShots(this.gameState, dt);
         tryCashIn(this.gameState);
         sendGameState(this, this.gameState);
     }

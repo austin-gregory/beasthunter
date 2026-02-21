@@ -22,10 +22,12 @@ function createState() {
     return {
         players: {},
         arrows: [],
+        bossShots: [],
         beasts: [],
         bosses: [],
         nextArrowId: 1,
-        nextBeastId: 1
+        nextBeastId: 1,
+        nextBossShotId: 1
     };
 }
 
@@ -50,7 +52,7 @@ function spawnBeasts(state) {
     state.beasts = [];
     const maps = getMapsWithBeastAreas();
     if (!maps.length) return;
-    const total = 12;
+    const total = Math.round(12 * 1.5);
     const base = Math.floor(total / maps.length);
     const extra = total % maps.length;
     const keys = ["wolf", "tiger", "spider"];
@@ -86,13 +88,19 @@ function spawnBosses(state) {
     const interiorMaps = ["interior_door_a", "interior_door_b"];
     state.bosses = interiorMaps.map((mapName, idx) => {
         const bounds = getMapBounds(mapName);
+        const cx = bounds.width / 2;
+        const cy = bounds.height / 2;
         return {
             id: `boss${idx + 1}`,
             map: mapName,
-            x: bounds.width / 2,
-            y: bounds.height / 2,
+            x: cx,
+            y: cy,
+            cx,
+            cy,
             hp: 1200,
-            maxHp: 1200
+            maxHp: 1200,
+            fireCooldown: 0.8,
+            spin: 0
         };
     });
 }
@@ -139,9 +147,12 @@ function getNearestPlayerInMap(state, map, x, y) {
     return { player: best, dist: bestD };
 }
 
-function killPlayer(state, player) {
+function killPlayer(state, player, options = {}) {
     player.hp = 0;
     player.dead = true;
+    if (options && options.respawnMap) {
+        player.map = options.respawnMap;
+    }
     releasePlayerTames(state, player.sessionId);
 }
 
@@ -180,6 +191,7 @@ function tryTame(state, player) {
 
     if (best) {
         best.tamedBy = player.sessionId;
+        best.hp = best.maxHp;
     }
 }
 

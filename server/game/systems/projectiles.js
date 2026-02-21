@@ -1,4 +1,4 @@
-const { ARROW_RADIUS, PLAYER_RADIUS, ENEMY_TYPES } = require("../constants");
+const { ARROW_RADIUS, PLAYER_RADIUS, ENEMY_TYPES, BOSS_FIREBALL_RADIUS, MAP_TOWN } = require("../constants");
 const { isInAnySafe, respawnBeast, clampArrowPosition, killPlayer } = require("../state");
 
 function simulateArrows(state, dt) {
@@ -56,7 +56,7 @@ function simulateArrows(state, dt) {
 
             p.hp -= a.dmg;
             if (p.hp <= 0) {
-                killPlayer(state, p);
+                killPlayer(state, p, { respawnMap: MAP_TOWN });
             }
             hit = true;
             break;
@@ -68,4 +68,35 @@ function simulateArrows(state, dt) {
     state.arrows = survivors;
 }
 
-module.exports = { simulateArrows };
+function simulateBossShots(state, dt) {
+    const survivors = [];
+
+    for (const s of state.bossShots) {
+        s.life -= dt;
+        if (s.life <= 0) continue;
+
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        if (clampArrowPosition(s)) continue;
+
+        let hit = false;
+
+        for (const p of Object.values(state.players)) {
+            if (!p || p.map !== s.map || p.hp <= 0 || p.dead) continue;
+            if (isInAnySafe(p.map, p.x, p.y)) continue;
+            if (Math.hypot(p.x - s.x, p.y - s.y) > PLAYER_RADIUS + BOSS_FIREBALL_RADIUS) continue;
+            p.hp -= s.dmg;
+            if (p.hp <= 0) {
+                killPlayer(state, p);
+            }
+            hit = true;
+            break;
+        }
+
+        if (!hit) survivors.push(s);
+    }
+
+    state.bossShots = survivors;
+}
+
+module.exports = { simulateArrows, simulateBossShots };

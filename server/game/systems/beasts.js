@@ -37,54 +37,71 @@ function updateBeasts(state, dt) {
                     b.vx = 0;
                     b.vy = 0;
                 }
-                const boss = getBossInMap(state, b.map);
-                if (boss) {
-                    const dx = boss.x - b.x;
-                    const dy = boss.y - b.y;
-                    const d = Math.max(1, Math.hypot(dx, dy));
-                    const followSpeed = type.speed * 2.2 * slowMult;
-                    b.vx = (dx / d) * followSpeed;
-                    b.vy = (dy / d) * followSpeed;
-                    if (d < type.size + 28) {
-                        boss.hp -= 40 * dt;
-                        boss.lastHitByTame = true;
-                    }
-                    // Skip formation when boss exists.
-                    continue;
-                }
                 const siblings = state.beasts
                     .filter((x) => x.tamedBy === owner.sessionId)
                     .sort((a, c) => a.id.localeCompare(c.id));
                 const slot = Math.max(0, siblings.findIndex((x) => x.id === b.id));
-                // Train formation: keep a steady position behind the player.
-                const lane = 0;
-                const row = slot;
-                const sideOffset = lane * FOLLOW_SIDE_GAP;
-                const backOffset = FOLLOW_BACK_BASE + row * FOLLOW_BACK_ROW * 1.15;
-
-                const tx = owner.x - ownerDir.x * backOffset - ownerDir.y * sideOffset;
-                const ty = owner.y - ownerDir.y * backOffset + ownerDir.x * sideOffset;
-
-                const dx = tx - b.x;
-                const dy = ty - b.y;
-                const d = Math.max(1, Math.hypot(dx, dy));
-                const near = clamp(d / 80, 0.35, 1);
-                const rubber = d > 120 ? clamp(1 + (d - 120) / 140, 1, 2.6) : 1;
-                const followSpeed = type.speed * 2.6 * near * slowMult * rubber;
-                b.vx = lerp(b.vx, (dx / d) * followSpeed, 0.6);
-                b.vy = lerp(b.vy, (dy / d) * followSpeed, 0.6);
-
-                if (d < 12) {
-                    b.vx *= 0.5;
-                    b.vy *= 0.5;
+                const boss = getBossInMap(state, b.map);
+                let usingBossMove = false;
+                if (boss) {
+                    const ringCount = Math.max(1, siblings.length);
+                    const angle = (Math.PI * 2 * slot) / ringCount;
+                    const ringRadius = 68 + Math.min(40, ringCount * 4);
+                    const tx = boss.x + Math.cos(angle) * ringRadius;
+                    const ty = boss.y + Math.sin(angle) * ringRadius;
+                    const dx = tx - b.x;
+                    const dy = ty - b.y;
+                    const d = Math.max(1, Math.hypot(dx, dy));
+                    const followSpeed = type.speed * 2.4 * slowMult;
+                    b.vx = (dx / d) * followSpeed;
+                    b.vy = (dy / d) * followSpeed;
+                    const bossDist = Math.hypot(boss.x - b.x, boss.y - b.y);
+                    if (bossDist < type.size + 28) {
+                        boss.hp -= 40 * dt;
+                        boss.lastHitByTame = true;
+                        if (boss.hp <= 0 && !boss.dead) {
+                            boss.hp = 0;
+                            boss.dead = true;
+                            if (owner) {
+                                const tamedCount = state.beasts.filter((x) => x.tamedBy === owner.sessionId).length;
+                                owner.score += 100 * (1 + tamedCount);
+                            }
+                        }
+                    }
+                    // Skip formation when boss exists.
+                    usingBossMove = true;
                 }
+                if (!usingBossMove) {
+                    // Train formation: keep a steady position behind the player.
+                    const lane = 0;
+                    const row = slot;
+                    const sideOffset = lane * FOLLOW_SIDE_GAP;
+                    const backOffset = FOLLOW_BACK_BASE + row * FOLLOW_BACK_ROW * 1.15;
 
-                // Hard catch-up only if they are extremely far (stuck on geometry).
-                if (d > 520) {
-                    b.x = tx;
-                    b.y = ty;
-                    b.vx = 0;
-                    b.vy = 0;
+                    const tx = owner.x - ownerDir.x * backOffset - ownerDir.y * sideOffset;
+                    const ty = owner.y - ownerDir.y * backOffset + ownerDir.x * sideOffset;
+
+                    const dx = tx - b.x;
+                    const dy = ty - b.y;
+                    const d = Math.max(1, Math.hypot(dx, dy));
+                    const near = clamp(d / 80, 0.35, 1);
+                    const rubber = d > 120 ? clamp(1 + (d - 120) / 140, 1, 2.6) : 1;
+                    const followSpeed = type.speed * 2.6 * near * slowMult * rubber;
+                    b.vx = lerp(b.vx, (dx / d) * followSpeed, 0.6);
+                    b.vy = lerp(b.vy, (dy / d) * followSpeed, 0.6);
+
+                    if (d < 12) {
+                        b.vx *= 0.5;
+                        b.vy *= 0.5;
+                    }
+
+                    // Hard catch-up only if they are extremely far (stuck on geometry).
+                    if (d > 520) {
+                        b.x = tx;
+                        b.y = ty;
+                        b.vx = 0;
+                        b.vy = 0;
+                    }
                 }
             }
         } else {

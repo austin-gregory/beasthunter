@@ -13,6 +13,7 @@ import BeastTigerPNG from "./assets/images/OrangeTabby-Idle.png";
 import BeastSpiderPNG from "./assets/images/spider.png";
 import BowPackPNG from "./assets/images/Bow Pack Black.png";
 import ArrowPNG from "./assets/images/arrow.png";
+import SpiderwebPNG from "./assets/images/spiderweb.png";
 import { PLAYER_MODELS } from "./playerModels";
 
 export class Scene1 extends Phaser.Scene {
@@ -42,6 +43,7 @@ export class Scene1 extends Phaser.Scene {
         this.load.image("beast-tiger", BeastTigerPNG);
         this.load.image("beast-spider", BeastSpiderPNG);
         this.load.image("arrow", ArrowPNG);
+        this.load.image("spiderweb", SpiderwebPNG);
     }
 
     create() {

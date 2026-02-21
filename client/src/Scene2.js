@@ -31,6 +31,7 @@ export class Scene2 extends Phaser.Scene {
         this.localStats = { hp: 100, ammo: 0, score: 0 };
         this.beastViews = new Map();
         this.bossViews = new Map();
+        this.bossShotViews = new Map();
         this.arrowViews = new Map();
         this.chargeTime = 0;
         this.maxChargeSeconds = 1.2;
@@ -54,6 +55,7 @@ export class Scene2 extends Phaser.Scene {
         this.isChargingShot = false;
         this.damagePopups = [];
         this.lastStateBosses = [];
+        this.lastStateBossShots = [];
     }
 
     create() {
@@ -88,6 +90,7 @@ export class Scene2 extends Phaser.Scene {
         this.worldLayer.setCollisionByProperty({ collides: true });
         this.aboveLayer.setDepth(10);
         this.doorZoneViews = [];
+        this.setupInteriorWeb();
 
         let spawnPoint = null;
         if (this.mapSpawn && Number.isFinite(this.mapSpawn.x) && Number.isFinite(this.mapSpawn.y)) {
@@ -144,6 +147,34 @@ export class Scene2 extends Phaser.Scene {
         const camera = this.cameras.main;
         camera.startFollow(this.player);
         camera.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+    }
+
+    setupInteriorWeb() {
+        const inInterior = this.mapName === "interior_door_a" || this.mapName === "interior_door_b";
+        if (!inInterior || !this.textures.exists("spiderweb")) return;
+        const w = this.map.widthInPixels;
+        const h = this.map.heightInPixels;
+        const tile = this.add.image(0, 0, "spiderweb").setOrigin(0).setAlpha(0.25).setDepth(-1);
+        const tex = this.textures.get("spiderweb");
+        const src = tex && tex.getSourceImage();
+        if (src && src.width && src.height) {
+            const cols = Math.ceil(w / src.width);
+            const rows = Math.ceil(h / src.height);
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (x === 0 && y === 0) {
+                        tile.setPosition(0, 0);
+                        continue;
+                    }
+                    this.add.image(x * src.width, y * src.height, "spiderweb")
+                        .setOrigin(0)
+                        .setAlpha(0.25)
+                        .setDepth(-1);
+                }
+            }
+        } else {
+            tile.setDisplaySize(w, h);
+        }
     }
 
     setupControls() {
@@ -314,11 +345,13 @@ export class Scene2 extends Phaser.Scene {
                 this.lastStatePlayers = Array.isArray(data.players) ? data.players : [];
                 this.lastStateBeasts = Array.isArray(data.beasts) ? data.beasts : [];
                 this.lastStateBosses = Array.isArray(data.bosses) ? data.bosses : [];
+                this.lastStateBossShots = Array.isArray(data.bossShots) ? data.bossShots : [];
                 this.syncRemotePlayersFromState(this.lastStatePlayers, joinedRoom.sessionId);
                 this.syncSafeZones(Array.isArray(data.safeZones) ? data.safeZones : []);
                 this.syncBeasts(Array.isArray(data.beasts) ? data.beasts : []);
                 this.syncBosses();
                 this.syncArrows(Array.isArray(data.arrows) ? data.arrows : []);
+                this.syncBossShots();
                 this.syncLocalStats(this.lastStatePlayers, joinedRoom.sessionId);
                 this.updateHud();
             });
@@ -360,7 +393,6 @@ export class Scene2 extends Phaser.Scene {
         this.updateSparkleFx();
         this.updateAmmoPopups();
         this.updateDamagePopups();
-        this.syncBosses();
     }
 
     handleMovementMessages() {
@@ -501,6 +533,8 @@ export class Scene2 extends Phaser.Scene {
                     };
                     this.time.delayedCall(5000, () => {
                         if (!view || view.transformed) return;
+                        if (!this.beastViews.has(b.id)) return;
+                        if (!view.pendingWolf || !view.pendingWolf.anims) return;
                         this.spawnTransformFx(b.x, b.y);
                         this.cameraShake();
                         this.spawnSummonText();
@@ -570,6 +604,7 @@ export class Scene2 extends Phaser.Scene {
                 for (let i = 0; i < view.tameDots.length; i++) {
                     const a = (Math.PI * 2 * i) / view.tameDots.length;
                     const dot = view.tameDots[i];
+                    dot.fillColor = 0xef4444;
                     dot.visible = true;
                     dot.setPosition(renderX + Math.cos(a) * r, renderY + Math.sin(a) * r);
                 }
@@ -671,13 +706,13 @@ export class Scene2 extends Phaser.Scene {
         const bosses = Array.isArray(this.lastStateBosses) ? this.lastStateBosses : [];
         const seen = new Set();
         bosses.forEach((boss) => {
-            if (!boss || boss.map !== this.mapName) return;
+            if (!boss || boss.map !== this.mapName || boss.hp <= 0) return;
             seen.add(boss.id);
             let view = this.bossViews.get(boss.id);
             if (!view) {
-                const sprite = this.add.sprite(boss.x, boss.y, "beast-spider").setScale(2.8).setDepth(6);
-                const hpBack = this.add.rectangle(boss.x, boss.y - 70, 120, 8, 0x111111).setDepth(7);
-                const hpFill = this.add.rectangle(boss.x - 60, boss.y - 70, 120, 8, 0x22c55e).setOrigin(0, 0.5).setDepth(8);
+                const sprite = this.add.sprite(boss.x, boss.y, "beast-spider").setScale(1.6).setDepth(6);
+                const hpBack = this.add.rectangle(boss.x, boss.y - 50, 100, 7, 0x111111).setDepth(7);
+                const hpFill = this.add.rectangle(boss.x - 50, boss.y - 50, 100, 7, 0x22c55e).setOrigin(0, 0.5).setDepth(8);
                 view = { sprite, hpBack, hpFill };
                 this.bossViews.set(boss.id, view);
             }
@@ -691,9 +726,10 @@ export class Scene2 extends Phaser.Scene {
             this.bossHpMemory.set(boss.id, boss.hp);
 
             view.sprite.setPosition(boss.x, boss.y);
-            view.hpBack.setPosition(boss.x, boss.y - 70);
-            view.hpFill.setPosition(boss.x - 60, boss.y - 70);
-            view.hpFill.width = Math.max(0, 120 * clamp(boss.hp / Math.max(1, boss.maxHp), 0, 1));
+            view.sprite.setRotation(boss.spin || 0);
+            view.hpBack.setPosition(boss.x, boss.y - 50);
+            view.hpFill.setPosition(boss.x - 50, boss.y - 50);
+            view.hpFill.width = Math.max(0, 100 * clamp(boss.hp / Math.max(1, boss.maxHp), 0, 1));
         });
 
         for (const [id, v] of this.bossViews.entries()) {
@@ -703,6 +739,32 @@ export class Scene2 extends Phaser.Scene {
             v.hpFill.destroy();
             this.bossViews.delete(id);
             this.bossHpMemory.delete(id);
+        }
+    }
+
+    syncBossShots() {
+        const shots = Array.isArray(this.lastStateBossShots) ? this.lastStateBossShots : [];
+        const seen = new Set();
+
+        shots.forEach((s) => {
+            if (!s || s.map !== this.mapName) return;
+            seen.add(s.id);
+            let view = this.bossShotViews.get(s.id);
+            if (!view) {
+                const core = this.add.circle(s.x, s.y, 5, 0x22c55e).setDepth(9);
+                const glow = this.add.circle(s.x, s.y, 8, 0x86efac, 0.35).setDepth(8);
+                view = { core, glow };
+                this.bossShotViews.set(s.id, view);
+            }
+            view.core.setPosition(s.x, s.y);
+            view.glow.setPosition(s.x, s.y);
+        });
+
+        for (const [id, v] of this.bossShotViews.entries()) {
+            if (seen.has(id)) continue;
+            v.core.destroy();
+            v.glow.destroy();
+            this.bossShotViews.delete(id);
         }
     }
 
@@ -1240,6 +1302,11 @@ export class Scene2 extends Phaser.Scene {
         }
         this.bossViews.clear();
         this.bossHpMemory.clear();
+        for (const s of this.bossShotViews.values()) {
+            s.core.destroy();
+            s.glow.destroy();
+        }
+        this.bossShotViews.clear();
         if (this.localDeadX) {
             this.localDeadX.destroy();
         }
@@ -1247,13 +1314,11 @@ export class Scene2 extends Phaser.Scene {
             s.destroy();
         }
         this.safeZoneGraphics = [];
-        for (const b of this.bossViews.values()) {
-            b.sprite.destroy();
-            b.hpBack.destroy();
-            b.hpFill.destroy();
+        for (const s of this.bossShotViews.values()) {
+            s.core.destroy();
+            s.glow.destroy();
         }
-        this.bossViews.clear();
-        this.bossHpMemory.clear();
+        this.bossShotViews.clear();
     }
 
     debugGraphics() {

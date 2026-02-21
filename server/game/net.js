@@ -32,7 +32,8 @@ function buildGameStatePayload(state) {
         x: b.x,
         y: b.y,
         hp: Math.round(b.hp),
-        maxHp: b.maxHp
+        maxHp: b.maxHp,
+        spin: b.spin || 0
     }));
 
     const arrows = state.arrows.map((a) => ({
@@ -43,11 +44,20 @@ function buildGameStatePayload(state) {
         angle: Math.atan2(a.vy, a.vx)
     }));
 
+    const bossShots = state.bossShots.map((s) => ({
+        id: s.id,
+        map: s.map,
+        x: s.x,
+        y: s.y,
+        angle: Math.atan2(s.vy, s.vx)
+    }));
+
     return {
         players,
         beasts,
         bosses,
         arrows,
+        bossShots,
         safeZones: getAllSafeZones()
     };
 }
