@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>PokeHunter MMO</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #f8fafc;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      }
+      #game-container {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 20px;
+        gap: 20px;
+      }
+      #game-view {
+        flex: 1;
+        min-width: 640px;
+        min-height: 360px;
+        height: calc(100vh - 40px);
+        max-width: 1200px;
+      }
+      canvas {
+        border: 2px solid #1f2937;
+        background: #ffffff;
+        width: 100%;
+        height: 100%;
+      }
+      #game-hud {
+        width: 300px;
+        border: 2px solid #1e293b;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #0f172a;
+        padding: 12px;
+        display: none;
+      }
+      #game-hud h3 {
+        margin: 0 0 10px;
+        font-size: 18px;
+      }
+      .hud-row {
+        display: flex;
+        justify-content: space-between;
+        margin: 6px 0;
+      }
+      .hud-label {
+        font-weight: 600;
+      }
+      #hud-board {
+        margin-top: 10px;
+        font-size: 13px;
+        line-height: 1.35;
+        color: #334155;
+      }
+      #hud-controls {
+        margin-top: 12px;
+        border-top: 1px solid #cbd5e1;
+        padding-top: 10px;
+        font-size: 13px;
+        color: #334155;
+      }
+      .hud-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0;
+      }
+      .hud-icon {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .hud-icon svg {
+        width: 22px;
+        height: 22px;
+      }
+      #death-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 14px;
+        background: rgba(127, 29, 29, 0.58);
+        z-index: 30;
+      }
+      #death-title {
+        font-size: 54px;
+        font-weight: 800;
+        color: #fee2e2;
+        text-shadow: 0 2px 0 #7f1d1d;
+      }
+      #respawn-btn {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-size: 18px;
+        font-weight: 700;
+        color: #111827;
+        background: #fef08a;
+        cursor: pointer;
+      }
+      #game-view {
+        position: relative;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <div id="game-view">
+        <div id="death-overlay">
+          <div id="death-title">DEAD</div>
+          <button id="respawn-btn" type="button">Respawn</button>
+        </div>
+      </div>
+      <aside id="game-hud">
+        <h3>PokeHunter HUD</h3>
+        <div class="hud-row"><span class="hud-label">Health</span><span id="hud-hp">100 / 100</span></div>
+        <div class="hud-row"><span class="hud-label">Arrows</span><span id="hud-ammo">0</span></div>
+        <div class="hud-row"><span class="hud-label">Score</span><span id="hud-score">0</span></div>
+        <div class="hud-row"><span class="hud-label">Shot Charge</span><span id="hud-charge">0%</span></div>
+        <div class="hud-row"><span class="hud-label">Tamed Beasts</span><span id="hud-beasts">0 following</span></div>
+        <div id="hud-board"></div>
+        <div id="hud-controls">
+          <div class="hud-control">Move: WASD / Arrows</div>
+          <div class="hud-control">
+            <span class="hud-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 6c4 1 12 1 16 0" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M4 6c1 4 1 12 0 16" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M20 6c-1 4-1 12 0 16" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round"/>
+                <circle cx="12" cy="13" r="5.8" stroke="#0f172a" stroke-width="1.4"/>
+                <path d="M12 7.8v10.4M6.8 13h10.4" stroke="#0f172a" stroke-width="1" stroke-linecap="round"/>
+              </svg>
+            </span>
+            Tame: SHIFT near weak beast
+          </div>
+          <div class="hud-control">
+            <span class="hud-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M5 18c4-8 8-12 14-14" stroke="#0f172a" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M5 18c4-2 6-1 8 2" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M13 5l6-1-1 6" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 11l6-6" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            Attack: Hold SPACE, release to fire
+          </div>
+          <div class="hud-control">Reload + heal: stay in safe camp zones</div>
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>
