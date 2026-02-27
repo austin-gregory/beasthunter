@@ -105,6 +105,14 @@ function spawnBosses(state) {
     });
 }
 
+function spawnBots(state) {
+    const { createBotEntry } = require("./systems/bots");
+    for (let i = 0; i < 3; i++) {
+        const bot = createBotEntry(i, state);
+        state.players[bot.sessionId] = bot;
+    }
+}
+
 function getBossInMap(state, mapName) {
     return state.bosses.find((b) => b.map === mapName);
 }
@@ -212,6 +220,7 @@ module.exports = {
     isInAnySafe,
     spawnBeasts,
     spawnBosses,
+    spawnBots,
     respawnBeast,
     releasePlayerTames,
     getNearestPlayerInMap,

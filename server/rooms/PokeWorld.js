@@ -6,7 +6,8 @@ const {
     PLAYER_MAX_HP,
     PLAYER_MAX_AMMO
 } = require("../game/constants");
-const { createState, allocateSlot, spawnBeasts, spawnBosses, releasePlayerTames } = require("../game/state");
+const { createState, allocateSlot, spawnBeasts, spawnBosses, spawnBots, releasePlayerTames } = require("../game/state");
+const { updateBots } = require("../game/systems/bots");
 const { getReloadSpawn, getFallbackSpawn } = require("../game/maps");
 const { updatePlayers } = require("../game/systems/players");
 const { updateBeasts } = require("../game/systems/beasts");
@@ -27,6 +28,7 @@ exports.PokeWorld = class extends colyseus.Room {
         this.gameState = createState();
         spawnBeasts(this.gameState);
         spawnBosses(this.gameState);
+        spawnBots(this.gameState);
 
         this.onMessage("PLAYER_MOVED", (client, data) => handlePlayerMoved(this, this.gameState, client, data));
         this.onMessage("PLAYER_MOVEMENT_ENDED", (client, data) =>
@@ -81,6 +83,7 @@ exports.PokeWorld = class extends colyseus.Room {
     onDispose() {}
 
     simulate(dt) {
+        updateBots(this.gameState, dt);
         updatePlayers(this.gameState, dt);
         updateBeasts(this.gameState, dt);
         updateBosses(this.gameState, dt);
