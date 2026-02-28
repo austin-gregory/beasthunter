@@ -6,13 +6,12 @@ import PlayersAtlasPNG from "./assets/images/players/players.png";
 import BowPackPNG from "./assets/images/Bow Pack Black.png";
 import BeastHunterMenuPNG from "./assets/images/beasthuntermenu.png";
 
-const MODEL_CARD_W = 200;
-const MODEL_CARD_H = 160;
-const MODEL_ICON_SCALE = 3.2;
-const BOW_CARD_W = 200;
-const BOW_CARD_H = 160;
-const BOW_ICON_SCALE = 2.3;
-const TOTAL_BOWS = 36;
+const CARD_W         = 148;
+const CARD_H         = 152;
+const MODEL_ICON_SCALE = 3.0;
+const BOW_ICON_SCALE   = 2.6;
+const TOTAL_BOWS       = 36;
+const ARROW_OFFSET     = CARD_W / 2 + 22;   // px from card center to arrow btn
 
 export class SceneMenu extends Phaser.Scene {
     constructor() {
@@ -21,11 +20,11 @@ export class SceneMenu extends Phaser.Scene {
 
     init() {
         this.selectedModelIndex = 0;
-        this.selectedBowIndex = 0;
-        this.selectedTeam = 1;
-        this.playerName = "";
-        this.isConnecting = false;
-        this.cursorVisible = true;
+        this.selectedBowIndex   = 0;
+        this.selectedTeam       = 1;
+        this.playerName         = "";
+        this.isConnecting       = false;
+        this.cursorVisible      = true;
     }
 
     preload() {
@@ -36,176 +35,150 @@ export class SceneMenu extends Phaser.Scene {
 
     create() {
         const { width, height } = this.cameras.main;
-        const centerX = width / 2;
+        const cx = width / 2;
 
-        this.drawBackground(width, height);
-
-        const logoFrameW = Math.round(width * 0.82);
-        const logoFrameH = Math.round(height * 0.28);
-        const logoFrameY = Math.round(height * 0.26);
-        const logoFrame = this.add.rectangle(centerX, logoFrameY, logoFrameW, logoFrameH, 0x22c55e)
-            .setStrokeStyle(4, 0x0f172a)
-            .setOrigin(0.5);
-
-        const logo = this.add.image(centerX, logoFrameY, "beasthunter-logo");
+        // ── Full-screen logo background ──────────────────────────────────────
+        const logo = this.add.image(cx, height / 2, "beasthunter-logo").setDepth(0);
         const logoTex = this.textures.get("beasthunter-logo");
         if (logoTex && logoTex.getSourceImage()) {
             const img = logoTex.getSourceImage();
-            const scale = Math.min(logoFrameW / img.width, logoFrameH / img.height);
+            const scale = Math.max(width / img.width, height / img.height);
             logo.setScale(scale);
         } else {
-            logo.setDisplaySize(logoFrameW, logoFrameH);
+            logo.setDisplaySize(width, height);
         }
 
-        const maskGfx = this.make.graphics().fillRect(
-            centerX - logoFrameW / 2,
-            logoFrameY - logoFrameH / 2,
-            logoFrameW,
-            logoFrameH
-        );
-        const mask = maskGfx.createGeometryMask();
-        logo.setMask(mask);
+        // ── Dark overlay covering the bottom half for UI readability ─────────
+        this.add.rectangle(cx, height, width, height * 0.52, 0x0a0f1a, 0.82)
+            .setOrigin(0.5, 1).setDepth(1);
 
-        const nameYOffset = 160;
-        this.nameLabel = this.add.text(centerX, 175 + nameYOffset, "Your name", {
+        // ── Name input ───────────────────────────────────────────────────────
+        const nameY = height * 0.545;
+        this.nameLabel = this.add.text(cx, nameY, "Your Name", {
+            fontFamily: "Trebuchet MS",
+            fontSize: "15px",
+            color: "#64748b",
+            letterSpacing: 2
+        }).setOrigin(0.5).setDepth(2);
+
+        this.nameBox = this.add.rectangle(cx, nameY + 32, 320, 42, 0x1e293b)
+            .setStrokeStyle(2, 0x334155).setOrigin(0.5).setDepth(2);
+
+        this.nameText = this.add.text(cx, nameY + 32, "", {
             fontFamily: "Trebuchet MS",
             fontSize: "20px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+            color: "#e2e8f0"
+        }).setOrigin(0.5).setDepth(3);
 
-        this.nameBox = this.add.rectangle(centerX, 215 + nameYOffset, 420, 48, 0xf0fdf4)
-            .setStrokeStyle(3, 0x22c55e)
-            .setOrigin(0.5);
+        // ── Three pickers, evenly spaced ─────────────────────────────────────
+        const pickerXL = width * 0.20;
+        const pickerXC = cx;
+        const pickerXR = width * 0.80;
+        const cardY    = height * 0.785;
+        const labelY   = cardY - CARD_H / 2 - 20;
 
-        this.nameText = this.add.text(centerX, 215 + nameYOffset, "", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "22px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        // ── Hunter picker ────────────────────────────────────────────────────
+        this.add.text(pickerXL, labelY, "Hunter", {
+            fontFamily: "Trebuchet MS", fontSize: "15px",
+            color: "#94a3b8", letterSpacing: 1
+        }).setOrigin(0.5).setDepth(2);
 
-        const modelX = centerX - 180;
-        const bowX = centerX + 220;
-        const pickerYOffset = 160;
-        const cardY = 380;
+        this.modelCard = this.add.rectangle(pickerXL, cardY, CARD_W, CARD_H, 0x1e293b)
+            .setStrokeStyle(3, 0xa855f7).setOrigin(0.5).setDepth(2);
+        this.modelGlow = this.add.rectangle(pickerXL, cardY, CARD_W + 12, CARD_H + 12, 0xa855f7, 0.12)
+            .setOrigin(0.5).setDepth(1);
 
-        this.add.text(modelX, 290 + pickerYOffset, "Hunter", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "18px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        this.modelSprite = this.add.sprite(pickerXL, cardY - 12, "players", "misa_front.png")
+            .setScale(MODEL_ICON_SCALE).setOrigin(0.5).setDepth(3);
 
-        this.add.text(bowX, 290 + pickerYOffset, "Bow", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "18px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        this.modelLabel = this.add.text(pickerXL, cardY + CARD_H / 2 - 22, "", {
+            fontFamily: "Trebuchet MS", fontSize: "13px", color: "#94a3b8"
+        }).setOrigin(0.5).setDepth(3);
 
-        this.modelCard = this.add.rectangle(modelX, cardY + pickerYOffset, MODEL_CARD_W, MODEL_CARD_H, 0xd6b48c)
-            .setStrokeStyle(3, 0xa855f7)
-            .setOrigin(0.5);
-        this.modelGlow = this.add.rectangle(modelX, cardY + pickerYOffset, MODEL_CARD_W + 14, MODEL_CARD_H + 14, 0xa855f7, 0.18)
-            .setOrigin(0.5)
-            .setDepth(this.modelCard.depth - 1);
-
-        this.modelSprite = this.add.sprite(modelX, cardY + pickerYOffset - 10, "players", "misa_front.png")
-            .setScale(MODEL_ICON_SCALE)
-            .setOrigin(0.5);
-
-        this.modelLabel = this.add.text(modelX, cardY + pickerYOffset + 60, "", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "16px",
-            color: "#334155"
-        }).setOrigin(0.5);
-
-        this.modelLeft = this.makeArrowButton(modelX - MODEL_CARD_W / 2 - 24, cardY + pickerYOffset, "<", () => {
+        this.modelLeft  = this.makeArrowButton(pickerXL - ARROW_OFFSET, cardY, "<", () => {
             this.selectedModelIndex = (this.selectedModelIndex - 1 + PLAYER_MODELS.length) % PLAYER_MODELS.length;
             this.updateModelSelection();
         });
-        this.modelRight = this.makeArrowButton(modelX + MODEL_CARD_W / 2 + 24, cardY + pickerYOffset, ">", () => {
+        this.modelRight = this.makeArrowButton(pickerXL + ARROW_OFFSET, cardY, ">", () => {
             this.selectedModelIndex = (this.selectedModelIndex + 1) % PLAYER_MODELS.length;
             this.updateModelSelection();
         });
 
-        this.bowCard = this.add.rectangle(bowX, cardY + pickerYOffset, BOW_CARD_W, BOW_CARD_H, 0xd6b48c)
-            .setStrokeStyle(3, 0xa855f7)
-            .setOrigin(0.5);
-        this.bowGlow = this.add.rectangle(bowX, cardY + pickerYOffset, BOW_CARD_W + 12, BOW_CARD_H + 12, 0xa855f7, 0.18)
-            .setOrigin(0.5)
-            .setDepth(this.bowCard.depth - 1);
+        // ── Bow picker ───────────────────────────────────────────────────────
+        this.add.text(pickerXC, labelY, "Bow", {
+            fontFamily: "Trebuchet MS", fontSize: "15px",
+            color: "#94a3b8", letterSpacing: 1
+        }).setOrigin(0.5).setDepth(2);
 
-        this.bowSprite = this.add.sprite(bowX, cardY + pickerYOffset - 6, "bows", 0)
-            .setScale(BOW_ICON_SCALE)
-            .setOrigin(0.5);
+        this.bowCard = this.add.rectangle(pickerXC, cardY, CARD_W, CARD_H, 0x1e293b)
+            .setStrokeStyle(3, 0xa855f7).setOrigin(0.5).setDepth(2);
+        this.bowGlow = this.add.rectangle(pickerXC, cardY, CARD_W + 12, CARD_H + 12, 0xa855f7, 0.12)
+            .setOrigin(0.5).setDepth(1);
 
-        this.bowLabel = this.add.text(bowX, cardY + pickerYOffset + 52, "Style 1", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "14px",
-            color: "#334155"
-        }).setOrigin(0.5);
+        this.bowSprite = this.add.sprite(pickerXC, cardY - 6, "bows", 0)
+            .setScale(BOW_ICON_SCALE).setOrigin(0.5).setDepth(3);
 
-        this.bowLeft = this.makeArrowButton(bowX - BOW_CARD_W / 2 - 24, cardY + pickerYOffset, "<", () => {
+        this.bowLabel = this.add.text(pickerXC, cardY + CARD_H / 2 - 22, "Style 1", {
+            fontFamily: "Trebuchet MS", fontSize: "13px", color: "#94a3b8"
+        }).setOrigin(0.5).setDepth(3);
+
+        this.bowLeft  = this.makeArrowButton(pickerXC - ARROW_OFFSET, cardY, "<", () => {
             this.selectedBowIndex = (this.selectedBowIndex - 1 + TOTAL_BOWS) % TOTAL_BOWS;
             this.updateBowSelection();
         });
-        this.bowRight = this.makeArrowButton(bowX + BOW_CARD_W / 2 + 24, cardY + pickerYOffset, ">", () => {
+        this.bowRight = this.makeArrowButton(pickerXC + ARROW_OFFSET, cardY, ">", () => {
             this.selectedBowIndex = (this.selectedBowIndex + 1) % TOTAL_BOWS;
             this.updateBowSelection();
         });
 
-        const teamY = height - 110;
-        this.add.text(centerX, teamY - 24, "Team", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "18px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        // ── Team picker ──────────────────────────────────────────────────────
+        this.add.text(pickerXR, labelY, "Team", {
+            fontFamily: "Trebuchet MS", fontSize: "15px",
+            color: "#94a3b8", letterSpacing: 1
+        }).setOrigin(0.5).setDepth(2);
 
-        this.team1Btn = this.add.rectangle(centerX - 60, teamY, 100, 40, 0x3b82f6)
-            .setStrokeStyle(3, 0x0f172a)
-            .setOrigin(0.5)
+        this.teamCard = this.add.rectangle(pickerXR, cardY, CARD_W, CARD_H, 0x1e293b)
+            .setStrokeStyle(3, 0x3b82f6).setOrigin(0.5).setDepth(2);
+        this.teamGlow = this.add.rectangle(pickerXR, cardY, CARD_W + 12, CARD_H + 12, 0x3b82f6, 0.12)
+            .setOrigin(0.5).setDepth(1);
+
+        this.teamNameText = this.add.text(pickerXR, cardY - 18, "Team 1", {
+            fontFamily: "Trebuchet MS", fontSize: "22px",
+            fontStyle: "bold", color: "#60a5fa"
+        }).setOrigin(0.5).setDepth(3);
+
+        this.teamDot = this.add.circle(pickerXR, cardY + 18, 18, 0x3b82f6)
+            .setDepth(3);
+
+        this.teamSubLabel = this.add.text(pickerXR, cardY + CARD_H / 2 - 22, "Blue", {
+            fontFamily: "Trebuchet MS", fontSize: "13px", color: "#94a3b8"
+        }).setOrigin(0.5).setDepth(3);
+
+        const cycleTeam = () => {
+            this.selectedTeam = this.selectedTeam === 1 ? 2 : 1;
+            this.updateTeamSelection();
+        };
+        this.teamLeft  = this.makeArrowButton(pickerXR - ARROW_OFFSET, cardY, "<", cycleTeam);
+        this.teamRight = this.makeArrowButton(pickerXR + ARROW_OFFSET, cardY, ">", cycleTeam);
+
+        // ── Join button ──────────────────────────────────────────────────────
+        const joinY = height * 0.945;
+        this.joinButton = this.add.rectangle(cx, joinY, 200, 46, 0x22c55e)
+            .setStrokeStyle(2, 0x15803d).setOrigin(0.5).setDepth(2)
             .setInteractive({ useHandCursor: true });
-        this.team1Text = this.add.text(centerX - 60, teamY, "Team 1", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "16px",
-            color: "#ffffff"
-        }).setOrigin(0.5);
-
-        this.team2Btn = this.add.rectangle(centerX + 60, teamY, 100, 40, 0xef4444)
-            .setStrokeStyle(3, 0x0f172a)
-            .setOrigin(0.5)
-            .setInteractive({ useHandCursor: true });
-        this.team2Text = this.add.text(centerX + 60, teamY, "Team 2", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "16px",
-            color: "#ffffff"
-        }).setOrigin(0.5);
-
-        this.team1Btn.on("pointerdown", () => { this.selectedTeam = 1; this.updateTeamSelection(); });
-        this.team1Text.on("pointerdown", () => { this.selectedTeam = 1; this.updateTeamSelection(); });
-        this.team2Btn.on("pointerdown", () => { this.selectedTeam = 2; this.updateTeamSelection(); });
-        this.team2Text.on("pointerdown", () => { this.selectedTeam = 2; this.updateTeamSelection(); });
-
-        this.joinButton = this.add.rectangle(centerX, height - 48, 220, 52, 0x22c55e)
-            .setStrokeStyle(3, 0x0f172a)
-            .setOrigin(0.5)
-            .setInteractive({ useHandCursor: true });
-        this.joinButtonGlow = this.add.rectangle(centerX, height - 48, 232, 64, 0xa855f7, 0.2)
-            .setOrigin(0.5)
-            .setDepth(this.joinButton.depth - 1);
-        this.joinText = this.add.text(centerX, height - 50, "Join", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "22px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        this.joinText = this.add.text(cx, joinY, "JOIN GAME", {
+            fontFamily: "Trebuchet MS", fontSize: "18px",
+            fontStyle: "bold", color: "#0f172a"
+        }).setOrigin(0.5).setDepth(3);
 
         this.joinButton.on("pointerdown", () => this.startGame());
         this.joinText.on("pointerdown", () => this.startGame());
 
-        this.statusText = this.add.text(centerX, height - 14, "", {
-            fontFamily: "Trebuchet MS",
-            fontSize: "15px",
-            color: "#b91c1c"
-        }).setOrigin(0.5);
+        this.statusText = this.add.text(cx, height - 6, "", {
+            fontFamily: "Trebuchet MS", fontSize: "14px", color: "#f87171"
+        }).setOrigin(0.5, 1).setDepth(3);
 
+        // ── Init ─────────────────────────────────────────────────────────────
         this.updateNameText();
         this.updateModelSelection();
         this.updateBowSelection();
@@ -217,10 +190,7 @@ export class SceneMenu extends Phaser.Scene {
         this.cursorTimer = this.time.addEvent({
             delay: 450,
             loop: true,
-            callback: () => {
-                this.cursorVisible = !this.cursorVisible;
-                this.updateNameText();
-            }
+            callback: () => { this.cursorVisible = !this.cursorVisible; this.updateNameText(); }
         });
 
         this.events.once("shutdown", () => {
@@ -229,89 +199,70 @@ export class SceneMenu extends Phaser.Scene {
         });
     }
 
-    drawBackground(width, height) {
-        const g = this.add.graphics();
-        g.fillGradientStyle(0xc7f9cc, 0x86efac, 0x22c55e, 0x16a34a, 1);
-        g.fillRect(0, 0, width, height);
-        const ribbon = this.add.rectangle(width / 2, 110, width, 120, 0xffffff, 0.35);
-        ribbon.setOrigin(0.5);
-    }
-
     makeArrowButton(x, y, label, onClick) {
-        const box = this.add.rectangle(x, y, 36, 36, 0xd6b48c)
-            .setStrokeStyle(2, 0xa855f7)
-            .setOrigin(0.5)
+        const box = this.add.rectangle(x, y, 32, 32, 0x1e293b)
+            .setStrokeStyle(2, 0x475569).setOrigin(0.5).setDepth(2)
             .setInteractive({ useHandCursor: true });
-        const txt = this.add.text(x, y - 2, label, {
-            fontFamily: "Trebuchet MS",
-            fontSize: "22px",
-            color: "#0f172a"
-        }).setOrigin(0.5);
+        const txt = this.add.text(x, y - 1, label, {
+            fontFamily: "Trebuchet MS", fontSize: "20px", color: "#94a3b8"
+        }).setOrigin(0.5).setDepth(3);
         box.on("pointerdown", onClick);
         txt.on("pointerdown", onClick);
         return { box, txt };
     }
 
     updateNameText() {
-        const displayName = this.playerName || "";
         const cursor = this.cursorVisible ? "▌" : "";
-        this.nameText.setText(displayName ? `${displayName}${cursor}` : `_${cursor}`);
+        this.nameText.setText(this.playerName ? `${this.playerName}${cursor}` : `_${cursor}`);
     }
 
     updateModelSelection() {
         const model = PLAYER_MODELS[this.selectedModelIndex];
         this.modelSprite.setTexture("players", `${model}_front.png`);
         this.modelLabel.setText(model);
-        this.modelCard.setStrokeStyle(4, 0xa855f7);
-        if (this.modelGlow) {
-            this.modelGlow.setAlpha(0.22);
-        }
     }
 
     updateBowSelection() {
         this.bowSprite.setFrame(this.selectedBowIndex);
         this.bowLabel.setText(`Style ${this.selectedBowIndex + 1}`);
-        this.bowCard.setStrokeStyle(4, 0xa855f7);
-        if (this.bowGlow) {
-            this.bowGlow.setAlpha(0.22);
-        }
     }
 
     updateTeamSelection() {
-        if (this.team1Btn) this.team1Btn.setAlpha(this.selectedTeam === 1 ? 1.0 : 0.4);
-        if (this.team1Text) this.team1Text.setAlpha(this.selectedTeam === 1 ? 1.0 : 0.4);
-        if (this.team2Btn) this.team2Btn.setAlpha(this.selectedTeam === 2 ? 1.0 : 0.4);
-        if (this.team2Text) this.team2Text.setAlpha(this.selectedTeam === 2 ? 1.0 : 0.4);
+        const isTeam1  = this.selectedTeam === 1;
+        const color    = isTeam1 ? 0x3b82f6 : 0xef4444;
+        const textCol  = isTeam1 ? "#60a5fa" : "#f87171";
+        const label    = isTeam1 ? "Team 1"  : "Team 2";
+        const sublabel = isTeam1 ? "Blue"    : "Red";
+
+        if (this.teamCard)      this.teamCard.setStrokeStyle(3, color);
+        if (this.teamGlow)      this.teamGlow.setFillStyle(color, 0.12);
+        if (this.teamDot)       this.teamDot.setFillStyle(color);
+        if (this.teamNameText)  this.teamNameText.setText(label).setColor(textCol);
+        if (this.teamSubLabel)  this.teamSubLabel.setText(sublabel);
     }
 
     onKeyDown(event) {
-        if (this.isConnecting) {
-            return;
-        }
+        if (this.isConnecting) return;
 
         if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.BACKSPACE) {
             this.playerName = this.playerName.slice(0, -1);
             this.updateNameText();
             return;
         }
-
         if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.LEFT) {
             this.selectedModelIndex = (this.selectedModelIndex - 1 + PLAYER_MODELS.length) % PLAYER_MODELS.length;
             this.updateModelSelection();
             return;
         }
-
         if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.RIGHT) {
             this.selectedModelIndex = (this.selectedModelIndex + 1) % PLAYER_MODELS.length;
             this.updateModelSelection();
             return;
         }
-
         if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.ENTER) {
             this.startGame();
             return;
         }
-
         if (event.key && event.key.length === 1 && this.playerName.length < 16) {
             if (/^[a-zA-Z0-9 _-]$/.test(event.key)) {
                 this.playerName += event.key;
@@ -325,16 +276,14 @@ export class SceneMenu extends Phaser.Scene {
         this.statusText.setText("Connecting...");
 
         const playerProfile = {
-            name: sanitizePlayerName(this.playerName),
+            name:  sanitizePlayerName(this.playerName),
             model: PLAYER_MODELS[this.selectedModelIndex],
-            bow: this.selectedBowIndex,
-            team: this.selectedTeam
+            bow:   this.selectedBowIndex,
+            team:  this.selectedTeam
         };
 
         connectPlayer(playerProfile)
-            .then(() => {
-                this.scene.start("bootGame", { playerProfile });
-            })
+            .then(() => this.scene.start("bootGame", { playerProfile }))
             .catch(() => {
                 this.isConnecting = false;
                 this.statusText.setText("Connection failed. Press Enter to retry.");
