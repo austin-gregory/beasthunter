@@ -15,7 +15,10 @@ const {
     getMapsWithBeastAreas,
     pickRandomPointInAreas,
     getReloadSpawn,
-    getFallbackSpawn
+    getFallbackSpawn,
+    getTeamAreas,
+    isInTeamArea,
+    getTeamSpawn
 } = require("./maps");
 
 function createState() {
@@ -27,7 +30,9 @@ function createState() {
         bosses: [],
         nextArrowId: 1,
         nextBeastId: 1,
-        nextBossShotId: 1
+        nextBossShotId: 1,
+        team1Score: 0,
+        team2Score: 0
     };
 }
 
@@ -46,6 +51,11 @@ function isInAnySafe(map, x, y) {
     const zones = getReloadAreas(map);
     if (!zones.length) return false;
     return zones.some((z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+}
+
+function isInTeamSafe(map, x, y, team) {
+    if (!map || !team) return false;
+    return isInTeamArea(map, x, y, team);
 }
 
 function spawnBeasts(state) {
@@ -84,31 +94,14 @@ function spawnBeasts(state) {
 }
 
 function spawnBosses(state) {
-    const { getMapBounds } = require("./maps");
-    const interiorMaps = ["interior_door_a", "interior_door_b"];
-    state.bosses = interiorMaps.map((mapName, idx) => {
-        const bounds = getMapBounds(mapName);
-        const cx = bounds.width / 2;
-        const cy = bounds.height / 2;
-        return {
-            id: `boss${idx + 1}`,
-            map: mapName,
-            x: cx,
-            y: cy,
-            cx,
-            cy,
-            hp: 1200,
-            maxHp: 1200,
-            fireCooldown: 0.8,
-            spin: 0
-        };
-    });
+    state.bosses = [];
 }
 
 function spawnBots(state) {
     const { createBotEntry } = require("./systems/bots");
-    for (let i = 0; i < 3; i++) {
-        const bot = createBotEntry(i, state);
+    for (let i = 0; i < 4; i++) {
+        const team = i < 2 ? 1 : 2;
+        const bot = createBotEntry(i, state, team);
         state.players[bot.sessionId] = bot;
     }
 }
@@ -165,17 +158,17 @@ function killPlayer(state, player, options = {}) {
 }
 
 function respawnPlayer(state, player) {
-    const mapName = player.map || MAP_TOWN;
-    const reloadSpawn = getReloadSpawn(mapName, player.slot);
-    const fallback = getFallbackSpawn(mapName);
-    const spawn = reloadSpawn || fallback || { x: 352, y: 1216 };
-    player.x = spawn.x;
-    player.y = spawn.y;
-    player.map = mapName;
+    const sp = (player.team === 1 || player.team === 2)
+        ? getTeamSpawn(player.team)
+        : (getReloadSpawn(MAP_TOWN, player.slot) || getFallbackSpawn(MAP_TOWN) || { x: 352, y: 1216 });
+    player.x = sp.x;
+    player.y = sp.y;
+    player.map = MAP_TOWN;
     player.hp = PLAYER_MAX_HP;
     player.ammo = PLAYER_MAX_AMMO;
     player.dir = "front";
     player.dead = false;
+    player.wolfHp = 0;
     releasePlayerTames(state, player.sessionId);
 }
 
@@ -218,6 +211,7 @@ module.exports = {
     createState,
     allocateSlot,
     isInAnySafe,
+    isInTeamSafe,
     spawnBeasts,
     spawnBosses,
     spawnBots,

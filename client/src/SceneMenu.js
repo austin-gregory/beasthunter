@@ -22,6 +22,7 @@ export class SceneMenu extends Phaser.Scene {
     init() {
         this.selectedModelIndex = 0;
         this.selectedBowIndex = 0;
+        this.selectedTeam = 1;
         this.playerName = "";
         this.isConnecting = false;
         this.cursorVisible = true;
@@ -151,6 +152,38 @@ export class SceneMenu extends Phaser.Scene {
             this.updateBowSelection();
         });
 
+        const teamY = height - 110;
+        this.add.text(centerX, teamY - 24, "Team", {
+            fontFamily: "Trebuchet MS",
+            fontSize: "18px",
+            color: "#0f172a"
+        }).setOrigin(0.5);
+
+        this.team1Btn = this.add.rectangle(centerX - 60, teamY, 100, 40, 0x3b82f6)
+            .setStrokeStyle(3, 0x0f172a)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true });
+        this.team1Text = this.add.text(centerX - 60, teamY, "Team 1", {
+            fontFamily: "Trebuchet MS",
+            fontSize: "16px",
+            color: "#ffffff"
+        }).setOrigin(0.5);
+
+        this.team2Btn = this.add.rectangle(centerX + 60, teamY, 100, 40, 0xef4444)
+            .setStrokeStyle(3, 0x0f172a)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true });
+        this.team2Text = this.add.text(centerX + 60, teamY, "Team 2", {
+            fontFamily: "Trebuchet MS",
+            fontSize: "16px",
+            color: "#ffffff"
+        }).setOrigin(0.5);
+
+        this.team1Btn.on("pointerdown", () => { this.selectedTeam = 1; this.updateTeamSelection(); });
+        this.team1Text.on("pointerdown", () => { this.selectedTeam = 1; this.updateTeamSelection(); });
+        this.team2Btn.on("pointerdown", () => { this.selectedTeam = 2; this.updateTeamSelection(); });
+        this.team2Text.on("pointerdown", () => { this.selectedTeam = 2; this.updateTeamSelection(); });
+
         this.joinButton = this.add.rectangle(centerX, height - 48, 220, 52, 0x22c55e)
             .setStrokeStyle(3, 0x0f172a)
             .setOrigin(0.5)
@@ -176,6 +209,7 @@ export class SceneMenu extends Phaser.Scene {
         this.updateNameText();
         this.updateModelSelection();
         this.updateBowSelection();
+        this.updateTeamSelection();
 
         this.keyHandler = (event) => this.onKeyDown(event);
         this.input.keyboard.on("keydown", this.keyHandler);
@@ -243,6 +277,13 @@ export class SceneMenu extends Phaser.Scene {
         }
     }
 
+    updateTeamSelection() {
+        if (this.team1Btn) this.team1Btn.setAlpha(this.selectedTeam === 1 ? 1.0 : 0.4);
+        if (this.team1Text) this.team1Text.setAlpha(this.selectedTeam === 1 ? 1.0 : 0.4);
+        if (this.team2Btn) this.team2Btn.setAlpha(this.selectedTeam === 2 ? 1.0 : 0.4);
+        if (this.team2Text) this.team2Text.setAlpha(this.selectedTeam === 2 ? 1.0 : 0.4);
+    }
+
     onKeyDown(event) {
         if (this.isConnecting) {
             return;
@@ -286,7 +327,8 @@ export class SceneMenu extends Phaser.Scene {
         const playerProfile = {
             name: sanitizePlayerName(this.playerName),
             model: PLAYER_MODELS[this.selectedModelIndex],
-            bow: this.selectedBowIndex
+            bow: this.selectedBowIndex,
+            team: this.selectedTeam
         };
 
         connectPlayer(playerProfile)

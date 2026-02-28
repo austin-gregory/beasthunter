@@ -11,13 +11,12 @@ const {
     ARROW_LIFE
 } = require("../constants");
 const { lerp, random, clamp } = require("../helpers");
-const { getReloadAreas, getMapBounds, getMapsWithBeastAreas, getReloadSpawn, getFallbackSpawn } = require("../maps");
-const { isInAnySafe, respawnPlayer, tryTame, releasePlayerTames } = require("../state");
+const { getMapBounds, getMapsWithBeastAreas, getTeamAreas, getTeamSpawn, getReloadAreas, isInTeamArea } = require("../maps");
+const { isInAnySafe, isInTeamSafe, respawnPlayer, tryTame, releasePlayerTames } = require("../state");
 
 // ─── tunables ────────────────────────────────────────────────────────────────
 const BOT_NAMES  = ["Aria", "Koda", "Fenwick", "Zephyr", "Morrigan"];
 const BOT_MODELS = ["knight", "ninja", "red", "femaletrainer", "professor"];
-const BOT_COUNT  = 3;
 const BOT_SPEED  = 90;          // px / s
 const SHOOT_RANGE = 300;
 const CHASE_RANGE = 180;
@@ -64,24 +63,14 @@ function _findShootTarget(bot, state) {
     let best = null;
     let bestD = Infinity;
 
-    // prefer real players
     for (const p of Object.values(state.players)) {
         if (p.sessionId === bot.sessionId) continue;
-        if (p.isBot) continue;
+        if (p.team === bot.team) continue;        // no friendly fire
         if (p.dead || p.hp <= 0) continue;
         if (p.map !== bot.map) continue;
-        if (isInAnySafe(p.map, p.x, p.y)) continue;
+        if (isInTeamSafe(p.map, p.x, p.y, p.team)) continue;
         const d = Math.hypot(p.x - bot.x, p.y - bot.y);
         if (d < SHOOT_RANGE && d < bestD) { best = p; bestD = d; }
-    }
-    if (best) return { target: best, dist: bestD };
-
-    // fall back to untamed beasts
-    for (const b of state.beasts) {
-        if (b.tamedBy) continue;
-        if (b.map !== bot.map) continue;
-        const d = Math.hypot(b.x - bot.x, b.y - bot.y);
-        if (d < SHOOT_RANGE && d < bestD) { best = b; bestD = d; }
     }
     return best ? { target: best, dist: bestD } : null;
 }
@@ -118,6 +107,7 @@ function _botFireArrow(bot, state, charge, targetX, targetY) {
     state.arrows.push({
         id: `a${state.nextArrowId++}`,
         owner: bot.sessionId,
+        team: bot.team,
         map: bot.map,
         x: bot.x + nx * 34,
         y: bot.y + ny * 34,
@@ -127,21 +117,6 @@ function _botFireArrow(bot, state, charge, targetX, targetY) {
         life: ARROW_LIFE
     });
     bot.dir = _dirFromVec(nx, ny);
-}
-
-// ─── map-change ───────────────────────────────────────────────────────────────
-function _maybeChangeMap(bot) {
-    if (bot._mapChangeTimer > 0) return;
-    const options = getMapsWithBeastAreas();
-    if (!options.length) return;
-    const pick = options[Math.floor(random(0, options.length))];
-    bot.map = pick.name;
-    const bounds = getMapBounds(pick.name);
-    bot.x = random(80, bounds.width - 80);
-    bot.y = random(80, bounds.height - 80);
-    bot._mapChangeTimer = 30 + random(0, 30);
-    bot._state = "WANDER";
-    _pickWanderTarget(bot);
 }
 
 // ─── state handlers ───────────────────────────────────────────────────────────
@@ -165,17 +140,19 @@ function _stateWander(bot, state, dt) {
         return;
     }
 
+    // check if holding beasts — go cash in (only if not already at reload zone)
+    const myBeasts = state.beasts.filter(b => b.tamedBy === bot.sessionId);
+    if (myBeasts.length && !isInAnySafe(bot.map, bot.x, bot.y)) {
+        bot._state = "CASH_IN";
+        return;
+    }
+
     if (bot._wanderTimer <= 0) {
         _pickWanderTarget(bot);
     }
 
     _moveToward(bot, bot._wanderTargetX, bot._wanderTargetY, BOT_SPEED * BOT_WANDER_SPEED_MULT, dt);
     _clampToMap(bot);
-
-    bot._mapChangeTimer -= dt;
-    if (bot._mapChangeTimer <= 0) {
-        _maybeChangeMap(bot);
-    }
 }
 
 function _stateHeal(bot, state, dt) {
@@ -185,24 +162,21 @@ function _stateHeal(bot, state, dt) {
         return;
     }
 
-    const zones = getReloadAreas(bot.map);
-    if (!zones.length) {
-        // no safe zone on this map — wander back to town
+    const areas = getTeamAreas(MAP_TOWN, bot.team);
+    if (!areas.length) {
         bot.map = MAP_TOWN;
         bot._state = "WANDER";
         _pickWanderTarget(bot);
         return;
     }
 
-    const zone = zones[0];
-    const cx = zone.x + zone.w / 2;
-    const cy = zone.y + zone.h / 2;
-    _moveToward(bot, cx, cy, BOT_SPEED, dt);
+    const zone = areas[0];
+    bot.map = MAP_TOWN;
+    _moveToward(bot, zone.x + zone.w / 2, zone.y + zone.h / 2, BOT_SPEED, dt);
     _clampToMap(bot);
 }
 
 function _stateChaseTarget(bot, state, dt) {
-    // resolve target — could be a player or beast
     const target =
         state.players[bot._targetId] ||
         state.beasts.find((b) => b.id === bot._targetId);
@@ -212,7 +186,7 @@ function _stateChaseTarget(bot, state, dt) {
         bot._targetId = null;
         return;
     }
-    if (target.sessionId && isInAnySafe(target.map, target.x, target.y)) {
+    if (target.sessionId && isInTeamSafe(target.map, target.x, target.y, target.team)) {
         bot._state = "WANDER";
         bot._targetId = null;
         return;
@@ -238,7 +212,7 @@ function _stateShoot(bot, state, dt) {
         bot._targetId = null;
         return;
     }
-    if (target.sessionId && isInAnySafe(target.map, target.x, target.y)) {
+    if (target.sessionId && isInTeamSafe(target.map, target.x, target.y, target.team)) {
         bot._state = "WANDER";
         bot._targetId = null;
         return;
@@ -288,7 +262,6 @@ function _stateTame(bot, state, dt) {
     const beast = state.beasts.find((b) => b.id === bot._targetId);
 
     if (!beast || beast.map !== bot.map || beast.hp / beast.maxHp > TAME_HP_RATIO) {
-        // lost or already tamed by someone else
         if (beast && beast.tamedBy === bot.sessionId) {
             bot._state = "WANDER";
         } else {
@@ -309,6 +282,23 @@ function _stateTame(bot, state, dt) {
         tryTame(state, bot);
         bot._tameCooldown = 0.5;
     }
+}
+
+function _stateCashIn(bot, state, dt) {
+    const myBeasts = state.beasts.filter(b => b.tamedBy === bot.sessionId);
+    if (!myBeasts.length) { bot._state = "WANDER"; return; }
+
+    // Find the reload area that sits inside this bot's team area
+    const reloadAreas = getReloadAreas(MAP_TOWN);
+    const zone = reloadAreas.find(r =>
+        isInTeamArea(MAP_TOWN, r.x + r.w / 2, r.y + r.h / 2, bot.team)
+    );
+    if (!zone) { bot._state = "WANDER"; return; }
+
+    bot.map = MAP_TOWN;
+    _moveToward(bot, zone.x + zone.w / 2, zone.y + zone.h / 2, BOT_SPEED, dt);
+    _clampToMap(bot);
+    // tryCashIn() in the game loop handles actual point award when bot reaches the reload zone
 }
 
 // ─── per-bot tick ─────────────────────────────────────────────────────────────
@@ -339,32 +329,30 @@ function tickBot(bot, state, dt) {
         case "SHOOT":        _stateShoot(bot, state, dt);        break;
         case "CHASE_BEAST":  _stateChaseBeast(bot, state, dt);   break;
         case "TAME":         _stateTame(bot, state, dt);         break;
+        case "CASH_IN":      _stateCashIn(bot, state, dt);       break;
         default:
             bot._state = "WANDER";
     }
 }
 
 // ─── public API ───────────────────────────────────────────────────────────────
-function createBotEntry(index, state) {
-    const { allocateSlot } = require("../state");
-    const slot = allocateSlot(state);
-    const sp =
-        getReloadSpawn(MAP_TOWN, slot) ||
-        getFallbackSpawn(MAP_TOWN) ||
-        { x: 352, y: 1216 };
+function createBotEntry(index, state, team) {
+    const sp = getTeamSpawn(team) || { x: 352, y: 1216 };
 
     const bot = {
         sessionId: `bot_${index}`,
         name:  BOT_NAMES[index % BOT_NAMES.length],
         model: BOT_MODELS[index % BOT_MODELS.length],
         bow:   0,
-        slot,
+        slot:  index,
         map:   MAP_TOWN,
         x:     sp.x,
         y:     sp.y,
         hp:    PLAYER_MAX_HP,
         ammo:  PLAYER_MAX_AMMO,
         score: 0,
+        team,
+        wolfHp: 0,
         dir:   "front",
         dead:  false,
         isBot: true,

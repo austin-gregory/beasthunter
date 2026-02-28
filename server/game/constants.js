@@ -40,6 +40,13 @@ const FOLLOW_SIDE_GAP = 24;
 const FOLLOW_OWNER_MIN_GAP = 42;
 
 
+const WOLF_COMPANION_HP       = 100;
+const WOLF_COMPANION_RADIUS   = 14;
+const WOLF_COMPANION_OFFSET   = 48;
+const WOLF_DAMAGE_MULTIPLIER  = 2;
+const SCORE_CASHIN_PER_BEAST  = 20;
+const SCORE_KILL              = 5;
+
 const ENEMY_TYPES = {
     wolf: { label: "Wolf", hp: 80, size: 16, speed: 62, score: 12 },
     tiger: { label: "Tiger", hp: 95, size: 17, speed: 66, score: 15 },
@@ -69,5 +76,11 @@ module.exports = {
     FOLLOW_BACK_ROW,
     FOLLOW_SIDE_GAP,
     FOLLOW_OWNER_MIN_GAP,
+    WOLF_COMPANION_HP,
+    WOLF_COMPANION_RADIUS,
+    WOLF_COMPANION_OFFSET,
+    WOLF_DAMAGE_MULTIPLIER,
+    SCORE_CASHIN_PER_BEAST,
+    SCORE_KILL,
     ENEMY_TYPES
 };

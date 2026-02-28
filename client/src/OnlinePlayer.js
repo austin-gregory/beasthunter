@@ -29,7 +29,9 @@ export default class OnlinePlayer extends Phaser.GameObjects.Sprite {
                 .setDepth(6);
         }
 
-        this.playerNickname = this.scene.add.text(this.x - 40, this.y - 25, config.name || "Player");
+        this.team = config.team || 0;
+        this.playerNickname = this.scene.add.text(this.x - 40, this.y - 25, config.name || "Player",
+            { color: _teamColor(config.team || 0), stroke: "#000000", strokeThickness: 2 });
         this.deadX = this.scene.add.text(this.x, this.y, "X", {
             font: "72px monospace",
             fill: "#dc2626",
@@ -47,6 +49,10 @@ export default class OnlinePlayer extends Phaser.GameObjects.Sprite {
             this.bowIndex = data.bow;
             if (this.bow) this.bow.setFrame(this.bowIndex);
         }
+        if (data.team !== undefined && data.team !== this.team) {
+            this.team = data.team;
+            this.playerNickname.setColor(_teamColor(data.team));
+        }
         this.setDead(!!data.dead);
     }
 
@@ -59,6 +65,7 @@ export default class OnlinePlayer extends Phaser.GameObjects.Sprite {
     }
 
     updateRemote(deltaMs) {
+        if (!this.anims) return;
         const t = Math.min(1, (deltaMs || 16) / 50);
         const nextX = Phaser.Math.Linear(this.x, this.targetX, 0.45 * t + 0.2);
         const nextY = Phaser.Math.Linear(this.y, this.targetY, 0.45 * t + 0.2);
@@ -131,6 +138,12 @@ export default class OnlinePlayer extends Phaser.GameObjects.Sprite {
             ease: "Quad.out"
         });
     }
+}
+
+function _teamColor(team) {
+    if (team === 1) return "#60a5fa";   // blue
+    if (team === 2) return "#f87171";   // red
+    return "#ffffff";
 }
 
 function getBowPose(facing) {

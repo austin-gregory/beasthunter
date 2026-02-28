@@ -68,8 +68,14 @@ export default class Player extends Phaser.GameObjects.Sprite {
         this.nextDoorUseAt = 0;
         this.shootLockUntil = 0;
 
+        this._team = 0;
+
         // Player nickname text
-        this.playerNickname = this.scene.add.text((this.x - this.width * 1.4), (this.y - (this.height / 2) - 30), this.scene.playerName || "Player");
+        this.playerNickname = this.scene.add.text(
+            (this.x - this.width * 1.4), (this.y - (this.height / 2) - 30),
+            this.scene.playerName || "Player",
+            { color: "#ffffff", stroke: "#000000", strokeThickness: 2 }
+        );
 
         // Interaction key (combat uses SPACE)
         this.interactKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
@@ -157,6 +163,13 @@ export default class Player extends Phaser.GameObjects.Sprite {
                 this.setTexture("players", `${this.model}_${this.facing}.png`);
             }
         }
+    }
+
+    setTeamColor(team) {
+        if (team === this._team) return;
+        this._team = team;
+        const color = team === 1 ? "#60a5fa" : team === 2 ? "#f87171" : "#ffffff";
+        this.playerNickname.setColor(color);
     }
 
     showPlayerNickname() {
@@ -300,7 +313,8 @@ export default class Player extends Phaser.GameObjects.Sprite {
             playerTexturePosition: targetFacing || this.playerTexturePosition || "front",
             playerProfile: {
                 name: this.scene.playerName,
-                model: this.scene.playerModel
+                model: this.scene.playerModel,
+                bow: this.scene.playerBowIndex
             },
             spawn
         });

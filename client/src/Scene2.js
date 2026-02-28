@@ -28,7 +28,11 @@ export class Scene2 extends Phaser.Scene {
             ? data.playerProfile.bow
             : 0;
 
-        this.localStats = { hp: 100, ammo: 0, score: 0 };
+        this.localStats = { hp: 100, ammo: 0, score: 0, wolfHp: 0, team: 0 };
+        this.team1Score = 0;
+        this.team2Score = 0;
+        this.wolfSprite = null;
+        this.remoteWolfSprites = new Map();
         this.beastViews = new Map();
         this.bossViews = new Map();
         this.bossShotViews = new Map();
@@ -144,6 +148,12 @@ export class Scene2 extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(15);
         this.localDeadX.visible = false;
 
+        if (this.textures.exists("beast-wolf")) {
+            this.wolfSprite = this.add.sprite(0, 0, "beast-wolf").setScale(1.5).setDepth(4);
+            this.wolfSprite.visible = false;
+            if (this.anims.exists("beast-wolf-walk")) this.wolfSprite.play("beast-wolf-walk");
+        }
+
         const camera = this.cameras.main;
         camera.startFollow(this.player);
         camera.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
@@ -220,12 +230,37 @@ export class Scene2 extends Phaser.Scene {
     setupHudRefs() {
         this.hudWrap = document.getElementById("game-hud");
         this.hudHp = document.getElementById("hud-hp");
+        this.hudHpFill = document.getElementById("hud-hp-fill");
         this.hudAmmo = document.getElementById("hud-ammo");
         this.hudScore = document.getElementById("hud-score");
+        this.hudWolfFill = document.getElementById("hud-wolf-fill");
         this.hudCharge = document.getElementById("hud-charge");
+        this.hudChargeFill = document.getElementById("hud-charge-fill");
         this.hudBeasts = document.getElementById("hud-beasts");
         this.hudBoard = document.getElementById("hud-board");
+        this.hudTeam1Card = document.getElementById("hud-team1-card");
+        this.hudTeam2Card = document.getElementById("hud-team2-card");
+        this.hudTeam1Score = document.getElementById("hud-team1-score");
+        this.hudTeam2Score = document.getElementById("hud-team2-score");
         if (this.hudWrap) this.hudWrap.style.display = "block";
+
+        // Extract the player's bow sprite from Phaser texture and set as icon
+        const bowsTex = this.textures.get("bows");
+        if (bowsTex) {
+            const frame = bowsTex.get(this.playerBowIndex || 0);
+            if (frame && frame.source && frame.source.image) {
+                const tmp = document.createElement("canvas");
+                tmp.width = frame.cutWidth;
+                tmp.height = frame.cutHeight;
+                tmp.getContext("2d").drawImage(
+                    frame.source.image,
+                    frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+                    0, 0, frame.cutWidth, frame.cutHeight
+                );
+                const bowIcon = document.getElementById("hud-bow-icon");
+                if (bowIcon) bowIcon.src = tmp.toDataURL("image/png");
+            }
+        }
         this.deathOverlay = document.getElementById("death-overlay");
         this.respawnBtn = document.getElementById("respawn-btn");
         this.onRespawnClick = () => {
@@ -252,6 +287,7 @@ export class Scene2 extends Phaser.Scene {
             joinedRoom.removeAllListeners("PLAYER_CHANGED_MAP");
             joinedRoom.removeAllListeners("PLAYER_SHOT");
             joinedRoom.removeAllListeners("GAME_STATE");
+            joinedRoom.removeAllListeners("BEAST_SUMMONED");
 
             joinedRoom.onMessage("CURRENT_PLAYERS", (data) => {
                 Object.keys(data.players || {}).forEach((playerId) => {
@@ -263,12 +299,13 @@ export class Scene2 extends Phaser.Scene {
                             playerId: player.sessionId,
                             key: player.sessionId,
                             worldLayer: this.worldLayer,
-                        map: player.map,
-                        model: player.model,
-                        bow: player.bow,
-                        name: player.name,
-                        x: player.x,
-                        y: player.y
+                            map: player.map,
+                            model: player.model,
+                            bow: player.bow,
+                            name: player.name,
+                            team: player.team || 0,
+                            x: player.x,
+                            y: player.y
                         });
                         this.ensureShootAnimations(player.model, Number.isFinite(player.bow) ? player.bow : 0);
                     }
@@ -287,6 +324,7 @@ export class Scene2 extends Phaser.Scene {
                         model: data.model,
                         bow: data.bow,
                         name: data.name,
+                        team: data.team || 0,
                         x: data.x,
                         y: data.y
                     });
@@ -326,6 +364,7 @@ export class Scene2 extends Phaser.Scene {
                         model: data.model,
                         bow: data.bow,
                         name: data.name,
+                        team: data.team || 0,
                         x: data.x,
                         y: data.y
                     });
@@ -346,6 +385,8 @@ export class Scene2 extends Phaser.Scene {
                 this.lastStateBeasts = Array.isArray(data.beasts) ? data.beasts : [];
                 this.lastStateBosses = Array.isArray(data.bosses) ? data.bosses : [];
                 this.lastStateBossShots = Array.isArray(data.bossShots) ? data.bossShots : [];
+                this.team1Score = data.team1Score || 0;
+                this.team2Score = data.team2Score || 0;
                 this.syncRemotePlayersFromState(this.lastStatePlayers, joinedRoom.sessionId);
                 this.syncSafeZones(Array.isArray(data.safeZones) ? data.safeZones : []);
                 this.syncBeasts(Array.isArray(data.beasts) ? data.beasts : []);
@@ -354,6 +395,12 @@ export class Scene2 extends Phaser.Scene {
                 this.syncBossShots();
                 this.syncLocalStats(this.lastStatePlayers, joinedRoom.sessionId);
                 this.updateHud();
+            });
+
+            joinedRoom.onMessage("BEAST_SUMMONED", (data) => {
+                if (data && data.sessionId === joinedRoom.sessionId) {
+                    this.showSummonEffect && this.showSummonEffect();
+                }
             });
         });
     }
@@ -382,6 +429,7 @@ export class Scene2 extends Phaser.Scene {
 
         this.player.update();
         this.updateLocalBow();
+        this.updateWolfCompanion();
         for (const remote of Object.values(onlinePlayers)) {
             if (remote && remote.map === this.mapName && typeof remote.updateRemote === "function") {
                 remote.updateRemote(this.game.loop.delta);
@@ -463,6 +511,31 @@ export class Scene2 extends Phaser.Scene {
         }
     }
 
+    updateWolfCompanion() {
+        if (!this.wolfSprite || !this.player) return;
+        const wolfHp = this.localStats && this.localStats.wolfHp || 0;
+        this.wolfSprite.visible = wolfHp > 0 && !this.isDead;
+        if (this.wolfSprite.visible) {
+            const facing = this.player.facing || "front";
+            const offsets = { left: { x: 1, y: 0 }, right: { x: -1, y: 0 }, back: { x: 0, y: 1 }, front: { x: 0, y: -1 } };
+            const o = offsets[facing] || offsets.front;
+            this.wolfSprite.setPosition(
+                this.player.x + o.x * 48,
+                this.player.y + o.y * 48
+            );
+
+            const vel = this.player.body && this.player.body.velocity;
+            const isMoving = vel && (Math.abs(vel.x) > 1 || Math.abs(vel.y) > 1);
+            if (isMoving) {
+                if (!this.wolfSprite.anims.isPlaying && this.anims.exists("beast-wolf-walk")) {
+                    this.wolfSprite.play("beast-wolf-walk");
+                }
+            } else {
+                if (this.wolfSprite.anims.isPlaying) this.wolfSprite.anims.stop();
+            }
+        }
+    }
+
     syncLocalStats(players, localSessionId) {
         const me = players.find((p) => p.sessionId === localSessionId);
         if (!me) return;
@@ -472,7 +545,13 @@ export class Scene2 extends Phaser.Scene {
         this.localStats.hp = me.hp;
         this.localStats.ammo = me.ammo;
         this.localStats.score = me.score;
+        this.localStats.wolfHp = me.wolfHp || 0;
+        this.localStats.team = me.team || 0;
         this.isDead = !!me.dead;
+
+        if (this.player && this.player.setTeamColor) {
+            this.player.setTeamColor(me.team || 0);
+        }
 
         if (Number.isFinite(prevHp) && me.hp < prevHp && this.player) {
             const hitCount = Math.min(20, Math.max(6, Math.round((prevHp - me.hp) * 0.9)));
@@ -672,6 +751,7 @@ export class Scene2 extends Phaser.Scene {
                     model: p.model,
                     bow: p.bow,
                     name: p.name,
+                    team: p.team || 0,
                     x: p.x,
                     y: p.y
                 });
@@ -686,12 +766,41 @@ export class Scene2 extends Phaser.Scene {
             }
             this.playerHpMemory.set(p.sessionId, p.hp);
             onlinePlayers[p.sessionId].setServerState(p);
+
+            // Remote wolf companion rendering
+            if (p.wolfHp > 0 && this.textures.exists("beast-wolf")) {
+                const dirOffsets = { left: { x: 1, y: 0 }, right: { x: -1, y: 0 }, back: { x: 0, y: 1 }, front: { x: 0, y: -1 } };
+                const o = dirOffsets[p.dir || "front"] || dirOffsets.front;
+                let ws = this.remoteWolfSprites.get(p.sessionId);
+                if (!ws) {
+                    ws = this.add.sprite(p.x + o.x * 48, p.y + o.y * 48, "beast-wolf").setScale(1.5).setDepth(4);
+                    ws._prevX = p.x;
+                    ws._prevY = p.y;
+                    this.remoteWolfSprites.set(p.sessionId, ws);
+                }
+                ws.setPosition(p.x + o.x * 48, p.y + o.y * 48);
+                ws.visible = true;
+
+                const remoteMoved = Math.hypot(p.x - ws._prevX, p.y - ws._prevY) > 1.5;
+                ws._prevX = p.x;
+                ws._prevY = p.y;
+                if (remoteMoved) {
+                    if (!ws.anims.isPlaying && this.anims.exists("beast-wolf-walk")) ws.play("beast-wolf-walk");
+                } else {
+                    if (ws.anims.isPlaying) ws.anims.stop();
+                }
+            } else {
+                const ws = this.remoteWolfSprites.get(p.sessionId);
+                if (ws) ws.visible = false;
+            }
         }
 
         for (const id of Object.keys(onlinePlayers)) {
             if (!seen.has(id)) {
                 onlinePlayers[id].destroy();
                 delete onlinePlayers[id];
+                const ws = this.remoteWolfSprites.get(id);
+                if (ws) { ws.destroy(); this.remoteWolfSprites.delete(id); }
             }
         }
 
@@ -789,6 +898,22 @@ export class Scene2 extends Phaser.Scene {
         });
     }
 
+    showSummonEffect() {
+        this.cameraShake();
+        this.spawnSummonBeams();
+        // slight delay before text so beams appear first
+        this.time.delayedCall(220, () => {
+            if (this.cameras && this.cameras.main) this.spawnSummonText();
+        });
+        // second wave of beams for extra drama
+        this.time.delayedCall(600, () => {
+            if (this.cameras && this.cameras.main) {
+                this.spawnSummonBeams();
+                this.cameraShake();
+            }
+        });
+    }
+
     spawnTransformFx(x, y) {
         this.spawnSummonBeams();
         for (let i = 0; i < 8; i++) {
@@ -815,15 +940,30 @@ export class Scene2 extends Phaser.Scene {
         const cam = this.cameras.main;
         const w = cam.width;
         const h = cam.height;
-        for (let i = 0; i < 4; i++) {
-            const y = 80 + i * 120 + Math.random() * 40;
-            const beam = this.add.rectangle(w / 2, y, w, 10, 0xa855f7, 0.7).setDepth(30);
-            beam.setAlpha(0.85);
-            beam.setScrollFactor(0);
+
+        // brief purple screen flash
+        const flash = this.add.rectangle(w / 2, h / 2, w, h, 0x7c3aed, 0.18)
+            .setDepth(29).setScrollFactor(0);
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 500,
+            ease: "Quad.out",
+            onComplete: () => flash.destroy()
+        });
+
+        // horizontal beams across the screen
+        const beamCount = 5;
+        for (let i = 0; i < beamCount; i++) {
+            const y = (h / beamCount) * i + (h / beamCount / 2) + (Math.random() - 0.5) * 30;
+            const thickness = 6 + Math.random() * 8;
+            const beam = this.add.rectangle(w / 2, y, w, thickness, 0xa855f7)
+                .setDepth(30).setScrollFactor(0).setAlpha(0.9);
             this.tweens.add({
                 targets: beam,
                 alpha: 0,
-                duration: 1400,
+                scaleX: 1.1,
+                duration: 900 + Math.random() * 600,
                 ease: "Quad.out",
                 onComplete: () => beam.destroy()
             });
@@ -836,19 +976,38 @@ export class Scene2 extends Phaser.Scene {
 
     spawnSummonText() {
         const cam = this.cameras.main;
-        const text = this.add.text(cam.centerX, cam.centerY - 120, "BEAST SUMMONED", {
-            font: "26px monospace",
+        // subtitle line
+        const sub = this.add.text(cam.centerX, cam.centerY - 80, "✦  WOLF COMPANION AWAKENED  ✦", {
+            font: "13px monospace",
+            fill: "#e879f9",
+            stroke: "#1f1333",
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(31).setScrollFactor(0).setAlpha(0);
+        // main title
+        const text = this.add.text(cam.centerX, cam.centerY - 120, "BEAST SUMMONED!", {
+            font: "bold 32px monospace",
             fill: "#c084fc",
             stroke: "#1f1333",
-            strokeThickness: 6
-        }).setOrigin(0.5).setDepth(31).setScrollFactor(0);
+            strokeThickness: 8
+        }).setOrigin(0.5).setDepth(31).setScrollFactor(0).setAlpha(0);
+
+        // fade in then drift up and out
         this.tweens.add({
-            targets: text,
-            y: cam.centerY - 150,
-            alpha: 0,
-            duration: 2200,
-            ease: "Quad.out",
-            onComplete: () => text.destroy()
+            targets: [text, sub],
+            alpha: { from: 0, to: 1 },
+            duration: 250,
+            ease: "Quad.in",
+            onComplete: () => {
+                this.tweens.add({
+                    targets: [text, sub],
+                    y: `-=40`,
+                    alpha: 0,
+                    delay: 800,
+                    duration: 1600,
+                    ease: "Quad.out",
+                    onComplete: () => { text.destroy(); sub.destroy(); }
+                });
+            }
         });
     }
 
@@ -1220,27 +1379,45 @@ export class Scene2 extends Phaser.Scene {
 
         const hp = Math.round(this.localStats.hp || 0);
         const ammo = this.localStats.ammo || 0;
-        const score = this.localStats.score || 0;
+        const wolfHp = this.localStats.wolfHp || 0;
+        const team = this.localStats.team || 0;
         const chargePct = Math.round((this.chargeTime / this.maxChargeSeconds) * 100);
 
-        if (this.hudHp) this.hudHp.textContent = `${hp} / 100`;
-        if (this.hudAmmo) this.hudAmmo.textContent = String(ammo);
-        if (this.hudScore) this.hudScore.textContent = String(score);
-        if (this.hudCharge) this.hudCharge.textContent = `${chargePct}%`;
+        // HP bar + value
+        if (this.hudHp) this.hudHp.textContent = String(hp);
+        if (this.hudHpFill) {
+            this.hudHpFill.style.width = `${hp}%`;
+            this.hudHpFill.style.background = hp >= 60 ? "#22c55e" : hp >= 30 ? "#eab308" : "#ef4444";
+        }
 
+        // Ammo
+        if (this.hudAmmo) this.hudAmmo.textContent = String(ammo);
+
+        // Wolf HP bar + value
+        if (this.hudScore) this.hudScore.textContent = wolfHp > 0 ? String(wolfHp) : "—";
+        if (this.hudWolfFill) this.hudWolfFill.style.width = `${wolfHp}%`;
+
+        // Charge bar + value
+        if (this.hudCharge) this.hudCharge.textContent = `${chargePct}%`;
+        if (this.hudChargeFill) {
+            this.hudChargeFill.style.width = `${chargePct}%`;
+            this.hudChargeFill.style.background =
+                chargePct <= 30 ? "#22c55e" :
+                chargePct <= 60 ? "#eab308" :
+                chargePct <= 80 ? "#f97316" : "#ef4444";
+        }
+
+        // Beasts
         if (this.hudBeasts) {
             const mine = this.lastStateBeasts.filter((b) => b.tamedBy === this.localSessionId).length;
-            this.hudBeasts.textContent = `${mine} following`;
+            this.hudBeasts.textContent = String(mine);
         }
 
-        if (this.hudBoard) {
-            const rows = this.lastStatePlayers
-                .slice()
-                .sort((a, b) => (b.score || 0) - (a.score || 0))
-                .slice(0, 6)
-                .map((p, i) => `${i + 1}. ${p.name}: ${p.score}`);
-            this.hudBoard.textContent = rows.join(" | ");
-        }
+        // Team scores + active team highlight
+        if (this.hudTeam1Score) this.hudTeam1Score.textContent = String(this.team1Score || 0);
+        if (this.hudTeam2Score) this.hudTeam2Score.textContent = String(this.team2Score || 0);
+        if (this.hudTeam1Card) this.hudTeam1Card.classList.toggle("is-you", team === 1);
+        if (this.hudTeam2Card) this.hudTeam2Card.classList.toggle("is-you", team === 2);
     }
 
     destroyTransientViews() {
@@ -1319,6 +1496,17 @@ export class Scene2 extends Phaser.Scene {
             s.glow.destroy();
         }
         this.bossShotViews.clear();
+        if (this.wolfSprite) {
+            this.wolfSprite.destroy();
+            this.wolfSprite = null;
+        }
+        for (const ws of this.remoteWolfSprites.values()) {
+            ws.destroy();
+        }
+        this.remoteWolfSprites.clear();
+        for (const id of Object.keys(onlinePlayers)) {
+            delete onlinePlayers[id];
+        }
     }
 
     debugGraphics() {

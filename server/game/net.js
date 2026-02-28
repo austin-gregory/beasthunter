@@ -12,7 +12,10 @@ function buildGameStatePayload(state) {
         hp: Math.round(p.hp),
         ammo: p.ammo,
         score: p.score,
-        dead: !!p.dead
+        dead: !!p.dead,
+        team:   p.team   || 0,
+        wolfHp: p.wolfHp || 0,
+        dir:    p.dir    || "front"
     }));
 
     const beasts = state.beasts.map((b) => ({
@@ -58,7 +61,9 @@ function buildGameStatePayload(state) {
         bosses,
         arrows,
         bossShots,
-        safeZones: getAllSafeZones()
+        safeZones: getAllSafeZones(),
+        team1Score: state.team1Score || 0,
+        team2Score: state.team2Score || 0
     };
 }
 

@@ -80,6 +80,8 @@ function loadMap(mapName) {
         bounds,
         reloadAreas: extractAreas("Reload Area"),
         beastAreas: extractAreas("Beast Area"),
+        team1Areas: extractAreas("Team 1 Area"),
+        team2Areas: extractAreas("Team 2 Area"),
         spawnPoints
     };
 
@@ -158,6 +160,25 @@ function getFallbackSpawn(mapName) {
     return { x: spawns[0].x, y: spawns[0].y };
 }
 
+function getTeamAreas(mapName, team) {
+    const meta = getMapMeta(mapName);
+    if (!meta) return [];
+    return team === 1 ? meta.team1Areas : meta.team2Areas;
+}
+
+function isInTeamArea(mapName, x, y, team) {
+    return getTeamAreas(mapName, team)
+        .some(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+}
+
+function getTeamSpawn(team) {
+    const { MAP_TOWN } = require("./constants");
+    const areas = getTeamAreas(MAP_TOWN, team);
+    if (!areas.length) return { x: 352, y: 1216 };
+    const a = areas[0];
+    return { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+}
+
 module.exports = {
     DEFAULT_BOUNDS,
     getMapMeta,
@@ -169,5 +190,8 @@ module.exports = {
     getMapsWithBeastAreas,
     pickRandomPointInAreas,
     getReloadSpawn,
-    getFallbackSpawn
+    getFallbackSpawn,
+    getTeamAreas,
+    isInTeamArea,
+    getTeamSpawn
 };

@@ -8,11 +8,10 @@ const {
 } = require("../game/constants");
 const { createState, allocateSlot, spawnBeasts, spawnBosses, spawnBots, releasePlayerTames } = require("../game/state");
 const { updateBots } = require("../game/systems/bots");
-const { getReloadSpawn, getFallbackSpawn } = require("../game/maps");
+const { getTeamSpawn } = require("../game/maps");
 const { updatePlayers } = require("../game/systems/players");
 const { updateBeasts } = require("../game/systems/beasts");
-const { updateBosses } = require("../game/systems/bosses");
-const { simulateArrows, simulateBossShots } = require("../game/systems/projectiles");
+const { simulateArrows } = require("../game/systems/projectiles");
 const { tryCashIn } = require("../game/systems/score");
 const { sendGameState } = require("../game/net");
 
@@ -46,7 +45,9 @@ exports.PokeWorld = class extends colyseus.Room {
 
     onJoin(client, options) {
         const slot = allocateSlot(this.gameState);
-        const sp = getReloadSpawn(MAP_TOWN, slot) || getFallbackSpawn(MAP_TOWN) || { x: 352, y: 1216 };
+        const rawTeam = Number(options && options.team);
+        const team = (rawTeam === 1 || rawTeam === 2) ? rawTeam : 1;
+        const sp = getTeamSpawn(team);
         const name = (options && typeof options.name === "string" ? options.name : "").trim().slice(0, 16) || "Player";
         const model = options && VALID_MODELS.has(options.model) ? options.model : "misa";
         const bow = Number.isFinite(options && options.bow) ? Math.max(0, Math.min(options.bow, 35)) : 0;
@@ -62,6 +63,8 @@ exports.PokeWorld = class extends colyseus.Room {
             hp: PLAYER_MAX_HP,
             ammo: PLAYER_MAX_AMMO,
             score: 0,
+            team,
+            wolfHp: 0,
             dir: "front",
             dead: false,
             bow
@@ -86,9 +89,7 @@ exports.PokeWorld = class extends colyseus.Room {
         updateBots(this.gameState, dt);
         updatePlayers(this.gameState, dt);
         updateBeasts(this.gameState, dt);
-        updateBosses(this.gameState, dt);
         simulateArrows(this.gameState, dt);
-        simulateBossShots(this.gameState, dt);
         tryCashIn(this.gameState);
         sendGameState(this, this.gameState);
     }

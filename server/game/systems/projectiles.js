@@ -1,5 +1,14 @@
-const { ARROW_RADIUS, PLAYER_RADIUS, ENEMY_TYPES, BOSS_FIREBALL_RADIUS, MAP_TOWN } = require("../constants");
-const { isInAnySafe, respawnBeast, clampArrowPosition, killPlayer } = require("../state");
+const {
+    ARROW_RADIUS, PLAYER_RADIUS, ENEMY_TYPES, MAP_TOWN,
+    WOLF_COMPANION_OFFSET, WOLF_COMPANION_RADIUS, SCORE_KILL
+} = require("../constants");
+const { vecFromDir } = require("../helpers");
+const { isInAnySafe, isInTeamSafe, respawnBeast, clampArrowPosition, killPlayer } = require("../state");
+
+function _getWolfPos(player) {
+    const d = vecFromDir(player.dir || "front");
+    return { x: player.x - d.x * WOLF_COMPANION_OFFSET, y: player.y - d.y * WOLF_COMPANION_OFFSET };
+}
 
 function simulateArrows(state, dt) {
     const survivors = [];
@@ -21,12 +30,12 @@ function simulateArrows(state, dt) {
             if (isInAnySafe(a.map, b.x, b.y)) continue;
             if (Math.hypot(b.x - a.x, b.y - a.y) > type.size + ARROW_RADIUS) continue;
 
-            const shooter = state.players[a.owner];
             b.hp -= a.dmg;
             b.slowTimer = Math.max(b.slowTimer || 0, 1.2);
             b.stunTimer = Math.max(b.stunTimer || 0, 1.0);
             if (b.hp <= 0) {
-                if (shooter) shooter.score += type.score;
+                if (a.team === 1) state.team1Score += SCORE_KILL;
+                else if (a.team === 2) state.team2Score += SCORE_KILL;
                 respawnBeast(b);
             }
             hit = true;
@@ -34,32 +43,31 @@ function simulateArrows(state, dt) {
         }
         if (hit) continue;
 
-        // Boss: arrows can damage but cannot finish the kill.
-        for (const boss of state.bosses) {
-            if (boss.map !== a.map || boss.hp <= 0) continue;
-            const dx = boss.x - a.x;
-            const dy = boss.y - a.y;
-            const d = Math.hypot(dx, dy);
-            if (d > 42) continue;
-            boss.hp = Math.max(1, boss.hp - a.dmg);
-            hit = true;
-            break;
-        }
-        if (hit) continue;
-
-        // PvP: arrows can hit other players outside safe zones.
+        // PvP: arrows can hit enemy players outside their team area.
         for (const p of Object.values(state.players)) {
             if (!p || p.sessionId === a.owner) continue;
+            if (p.team && a.team && p.team === a.team) continue;   // no friendly fire
             if (p.map !== a.map || p.hp <= 0 || p.dead) continue;
-            if (isInAnySafe(p.map, p.x, p.y)) continue;
+            if (isInTeamSafe(p.map, p.x, p.y, p.team)) continue;
+
+            // Check wolf hitbox first
+            if (p.wolfHp > 0) {
+                const wp = _getWolfPos(p);
+                if (Math.hypot(wp.x - a.x, wp.y - a.y) <= WOLF_COMPANION_RADIUS + ARROW_RADIUS) {
+                    p.wolfHp = Math.max(0, p.wolfHp - a.dmg);
+                    hit = true; break;
+                }
+            }
+
             if (Math.hypot(p.x - a.x, p.y - a.y) > PLAYER_RADIUS + ARROW_RADIUS) continue;
 
             p.hp -= a.dmg;
             if (p.hp <= 0) {
                 killPlayer(state, p, { respawnMap: MAP_TOWN });
+                if (a.team === 1) state.team1Score += SCORE_KILL;
+                else if (a.team === 2) state.team2Score += SCORE_KILL;
             }
-            hit = true;
-            break;
+            hit = true; break;
         }
 
         if (!hit) survivors.push(a);
@@ -68,35 +76,4 @@ function simulateArrows(state, dt) {
     state.arrows = survivors;
 }
 
-function simulateBossShots(state, dt) {
-    const survivors = [];
-
-    for (const s of state.bossShots) {
-        s.life -= dt;
-        if (s.life <= 0) continue;
-
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        if (clampArrowPosition(s)) continue;
-
-        let hit = false;
-
-        for (const p of Object.values(state.players)) {
-            if (!p || p.map !== s.map || p.hp <= 0 || p.dead) continue;
-            if (isInAnySafe(p.map, p.x, p.y)) continue;
-            if (Math.hypot(p.x - s.x, p.y - s.y) > PLAYER_RADIUS + BOSS_FIREBALL_RADIUS) continue;
-            p.hp -= s.dmg;
-            if (p.hp <= 0) {
-                killPlayer(state, p);
-            }
-            hit = true;
-            break;
-        }
-
-        if (!hit) survivors.push(s);
-    }
-
-    state.bossShots = survivors;
-}
-
-module.exports = { simulateArrows, simulateBossShots };
+module.exports = { simulateArrows };

@@ -1,22 +1,24 @@
 const { isInAnySafe, respawnBeast } = require("../state");
+const { SCORE_CASHIN_PER_BEAST } = require("../constants");
 
 function tryCashIn(state) {
     for (const p of Object.values(state.players)) {
+        if (!p.team) continue;
         if (!isInAnySafe(p.map, p.x, p.y)) continue;
 
-        const carried = { wolf: false, tiger: false, spider: false };
-        for (const b of state.beasts) {
-            if (b.tamedBy === p.sessionId) carried[b.key] = true;
+        const myBeasts = state.beasts.filter(b => b.tamedBy === p.sessionId);
+        if (!myBeasts.length) continue;
+
+        const seen = new Set();
+        let pts = 0;
+        for (const b of myBeasts) {
+            if (!seen.has(b.key)) { seen.add(b.key); pts += SCORE_CASHIN_PER_BEAST; }
         }
 
-        if (carried.wolf && carried.tiger && carried.spider) {
-            p.score += 100;
-            for (const b of state.beasts) {
-                if (b.tamedBy === p.sessionId) {
-                    respawnBeast(b);
-                }
-            }
-        }
+        if (p.team === 1) state.team1Score += pts;
+        else if (p.team === 2) state.team2Score += pts;
+
+        for (const b of myBeasts) respawnBeast(b);
     }
 }
 
