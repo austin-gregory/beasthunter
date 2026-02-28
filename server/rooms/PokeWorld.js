@@ -6,7 +6,8 @@ const {
     PLAYER_MAX_HP,
     PLAYER_MAX_AMMO
 } = require("../game/constants");
-const { createState, allocateSlot, spawnBeasts, spawnBosses, spawnBots, releasePlayerTames } = require("../game/state");
+const { createState, allocateSlot, spawnBeasts, spawnBosses, spawnBots, releasePlayerTames, respawnBeast } = require("../game/state");
+const { WOLF_COMPANION_HP } = require("../game/constants");
 const { updateBots } = require("../game/systems/bots");
 const { getTeamSpawn } = require("../game/maps");
 const { updatePlayers } = require("../game/systems/players");
@@ -65,6 +66,7 @@ exports.PokeWorld = class extends colyseus.Room {
             score: 0,
             team,
             wolfHp: 0,
+            wolfSummonCountdown: 0,
             dir: "front",
             dead: false,
             bow
@@ -90,7 +92,25 @@ exports.PokeWorld = class extends colyseus.Room {
         updatePlayers(this.gameState, dt);
         updateBeasts(this.gameState, dt);
         simulateArrows(this.gameState, dt);
+        this._tickWolfSummons(dt);
         tryCashIn(this.gameState);
         sendGameState(this, this.gameState);
+    }
+
+    _tickWolfSummons(dt) {
+        for (const p of Object.values(this.gameState.players)) {
+            if (!p.wolfSummonCountdown || p.wolfSummonCountdown <= 0) continue;
+            p.wolfSummonCountdown -= dt;
+            if (p.wolfSummonCountdown <= 0) {
+                p.wolfSummonCountdown = 0;
+                const myBeasts = this.gameState.beasts.filter(b => b.tamedBy === p.sessionId);
+                const ownedTypes = new Set(myBeasts.map(b => b.key));
+                if (ownedTypes.has("wolf") && ownedTypes.has("tiger") && ownedTypes.has("spider")) {
+                    for (const b of myBeasts) respawnBeast(b);
+                    p.wolfHp = WOLF_COMPANION_HP;
+                    this.broadcast("BEAST_SUMMONED", { sessionId: p.sessionId });
+                }
+            }
+        }
     }
 };

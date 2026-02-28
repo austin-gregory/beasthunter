@@ -50,6 +50,8 @@ export class Scene2 extends Phaser.Scene {
         this.playerHpMemory = new Map();
         this.bloodFx = [];
         this.sparkleFx = [];
+        this.trailFx = [];
+        this.summoningRitual = null;
         this.ammoPopups = [];
         this.safeZonesData = [];
         this.isDead = false;
@@ -204,16 +206,7 @@ export class Scene2 extends Phaser.Scene {
         this.game.canvas.focus();
         this.input.on("pointerdown", () => this.game.canvas.focus());
 
-        this.add
-            .text(16, 16, "Move: WASD / Arrows\nHold SPACE: charge shot\nSHIFT: tame weak beast\nD: hitboxes", {
-                font: "16px monospace",
-                fill: "#000000",
-                padding: { x: 14, y: 8 },
-                backgroundColor: "#ffffff"
-            })
-            .setScrollFactor(0)
-            .setDepth(30);
-        this.doorHint = this.add.text(16, 92, "Door nearby: press E or Enter", {
+        this.doorHint = this.add.text(16, 16, "Door nearby: press E or Enter", {
             font: "16px monospace",
             fill: "#ffffff",
             padding: { x: 12, y: 6 },
@@ -288,6 +281,7 @@ export class Scene2 extends Phaser.Scene {
             joinedRoom.removeAllListeners("PLAYER_SHOT");
             joinedRoom.removeAllListeners("GAME_STATE");
             joinedRoom.removeAllListeners("BEAST_SUMMONED");
+            joinedRoom.removeAllListeners("BEAST_SUMMONING");
 
             joinedRoom.onMessage("CURRENT_PLAYERS", (data) => {
                 Object.keys(data.players || {}).forEach((playerId) => {
@@ -397,8 +391,13 @@ export class Scene2 extends Phaser.Scene {
                 this.updateHud();
             });
 
+            joinedRoom.onMessage("BEAST_SUMMONING", (data) => {
+                this.startSummoningRitual((data && data.duration) || 15);
+            });
+
             joinedRoom.onMessage("BEAST_SUMMONED", (data) => {
                 if (data && data.sessionId === joinedRoom.sessionId) {
+                    this.clearSummoningRitual();
                     this.showSummonEffect && this.showSummonEffect();
                 }
             });
@@ -419,6 +418,7 @@ export class Scene2 extends Phaser.Scene {
             if (this.playerBow) this.playerBow.visible = false;
             this.updateBloodFx();
             this.updateSparkleFx();
+            this.updateTrailFx();
             this.updateAmmoPopups();
             return;
         }
@@ -430,6 +430,7 @@ export class Scene2 extends Phaser.Scene {
         this.player.update();
         this.updateLocalBow();
         this.updateWolfCompanion();
+        this.updateSummoningRitual();
         for (const remote of Object.values(onlinePlayers)) {
             if (remote && remote.map === this.mapName && typeof remote.updateRemote === "function") {
                 remote.updateRemote(this.game.loop.delta);
@@ -439,6 +440,7 @@ export class Scene2 extends Phaser.Scene {
         this.handleCombatInputs();
         this.updateBloodFx();
         this.updateSparkleFx();
+        this.updateTrailFx();
         this.updateAmmoPopups();
         this.updateDamagePopups();
     }
@@ -534,6 +536,51 @@ export class Scene2 extends Phaser.Scene {
                 if (this.wolfSprite.anims.isPlaying) this.wolfSprite.anims.stop();
             }
         }
+    }
+
+    startSummoningRitual(duration) {
+        this.clearSummoningRitual();
+        // Three orbiting circles: wolf (blue), tiger (orange), spider (purple)
+        const colors = [0x60a5fa, 0xfb923c, 0xa855f7];
+        const circles = colors.map((color, i) => ({
+            sprite: this.add.circle(0, 0, 11, color).setDepth(16).setAlpha(0.9),
+            phase: (i / colors.length) * Math.PI * 2
+        }));
+        const text = this.add.text(0, 0, "", {
+            font: "bold 14px monospace",
+            fill: "#e879f9",
+            stroke: "#1a0a2e",
+            strokeThickness: 5
+        }).setOrigin(0.5).setDepth(17);
+        this.summoningRitual = { circles, text, elapsed: 0, duration };
+    }
+
+    updateSummoningRitual() {
+        if (!this.summoningRitual || !this.player) return;
+        const r = this.summoningRitual;
+        r.elapsed += this.game.loop.delta / 1000;
+
+        const radius = 52;
+        const speed = Math.PI * 1.4; // rad/s
+        for (const c of r.circles) {
+            const angle = c.phase + r.elapsed * speed;
+            c.sprite.setPosition(
+                this.player.x + Math.cos(angle) * radius,
+                this.player.y + Math.sin(angle) * radius
+            );
+            c.sprite.alpha = 0.5 + 0.4 * Math.sin(r.elapsed * 6 + c.phase);
+        }
+
+        const remaining = Math.ceil(Math.max(0, r.duration - r.elapsed));
+        r.text.setPosition(this.player.x, this.player.y - 72);
+        r.text.setText(`✦ Summoning... ${remaining}s`);
+    }
+
+    clearSummoningRitual() {
+        if (!this.summoningRitual) return;
+        for (const c of this.summoningRitual.circles) c.sprite.destroy();
+        this.summoningRitual.text.destroy();
+        this.summoningRitual = null;
     }
 
     syncLocalStats(players, localSessionId) {
@@ -1223,6 +1270,20 @@ export class Scene2 extends Phaser.Scene {
         }
     }
 
+    updateTrailFx() {
+        const dt = this.game.loop.delta / 1000;
+        for (let i = this.trailFx.length - 1; i >= 0; i--) {
+            const fx = this.trailFx[i];
+            fx.life -= dt;
+            if (fx.life <= 0) {
+                fx.p.destroy();
+                this.trailFx.splice(i, 1);
+                continue;
+            }
+            fx.p.alpha = fx.life / fx.maxLife;
+        }
+    }
+
     isPlayerInSafeZone(player) {
         if (!player || player.map !== this.mapName || !this.safeZonesData.length) {
             return false;
@@ -1348,8 +1409,39 @@ export class Scene2 extends Phaser.Scene {
                     trail.setLineWidth(2, 2);
                     view = { tri, trail };
                 }
+                view._prevX = a.x;
+                view._prevY = a.y;
                 this.arrowViews.set(a.id, view);
             }
+
+            // Spawn colored trail particles along the path since last tick
+            const dx = a.x - view._prevX;
+            const dy = a.y - view._prevY;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0.5) {
+                const charge = Math.min(1, Math.max(0, ((a.dmg || 8) - 8) / 24));
+                const color = _arrowTrailColor(charge);
+                const innerSize = 2 + charge * 4;
+                const outerSize = innerSize * 2.8;
+                const life = 0.18 + charge * 0.22;
+                const count = 2 + Math.round(charge * 3);
+                for (let i = 0; i < count; i++) {
+                    const t = i / count;
+                    const px = view._prevX + dx * t;
+                    const py = view._prevY + dy * t;
+                    // glow halo
+                    const glow = this.add.rectangle(px, py, outerSize, outerSize, color)
+                        .setDepth(11).setAlpha(0.28 + charge * 0.12);
+                    this.trailFx.push({ p: glow, life, maxLife: life });
+                    // bright core
+                    const core = this.add.rectangle(px, py, innerSize, innerSize, color)
+                        .setDepth(12).setAlpha(0.9);
+                    this.trailFx.push({ p: core, life: life * 0.6, maxLife: life * 0.6 });
+                }
+            }
+            view._prevX = a.x;
+            view._prevY = a.y;
+
             const angle = Number.isFinite(a.angle) ? a.angle : 0;
             if (view.sprite) {
                 view.sprite.setPosition(a.x, a.y);
@@ -1402,9 +1494,9 @@ export class Scene2 extends Phaser.Scene {
         if (this.hudChargeFill) {
             this.hudChargeFill.style.width = `${chargePct}%`;
             this.hudChargeFill.style.background =
-                chargePct <= 30 ? "#22c55e" :
-                chargePct <= 60 ? "#eab308" :
-                chargePct <= 80 ? "#f97316" : "#ef4444";
+                chargePct <= 33 ? "#93c5fd" :
+                chargePct <= 66 ? "#fde047" :
+                chargePct <= 83 ? "#f97316" : "#ef4444";
         }
 
         // Beasts
@@ -1464,6 +1556,10 @@ export class Scene2 extends Phaser.Scene {
             fx.p.destroy();
         }
         this.sparkleFx = [];
+        for (const fx of this.trailFx) {
+            fx.p.destroy();
+        }
+        this.trailFx = [];
         for (const p of this.ammoPopups) {
             p.t.destroy();
         }
@@ -1507,6 +1603,7 @@ export class Scene2 extends Phaser.Scene {
         for (const id of Object.keys(onlinePlayers)) {
             delete onlinePlayers[id];
         }
+        this.clearSummoningRitual();
     }
 
     debugGraphics() {
@@ -1537,4 +1634,17 @@ function getBowPose(facing) {
 
 function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
+}
+
+// Arrow trail color: blue (uncharged) → yellow → orange → red (full charge)
+function _arrowTrailColor(charge) {
+    const stops = [0x93c5fd, 0xfde047, 0xf97316, 0xef4444];
+    const t = Math.min(1, Math.max(0, charge)) * (stops.length - 1);
+    const i = Math.min(Math.floor(t), stops.length - 2);
+    const f = t - i;
+    const a = stops[i], b = stops[i + 1];
+    const ch = (ca, cb) => Math.round(ca + (cb - ca) * f);
+    return (ch((a >> 16) & 0xff, (b >> 16) & 0xff) << 16) |
+           (ch((a >>  8) & 0xff, (b >>  8) & 0xff) <<  8) |
+            ch( a        & 0xff,  b        & 0xff);
 }

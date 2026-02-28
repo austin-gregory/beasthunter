@@ -3,28 +3,38 @@ const { respawnBeast } = require("../state");
 const { WOLF_COMPANION_HP, MAP_TOWN } = require("../constants");
 const { getTeamSpawn } = require("../maps");
 
+const WOLF_SUMMON_DELAY = 15; // seconds
+
 function handlePlayerChangedMap(room, state, client, data) {
     const p = state.players[client.sessionId];
     if (!p || !data || !data.map || p.dead) return;
 
-    if (INTERIOR_MAPS.has(data.map) && p.wolfHp === 0) {
+    const prevMap = p.map;
+
+    // Entering an interior — start wolf summon countdown if eligible
+    if (INTERIOR_MAPS.has(data.map) && p.wolfHp === 0 && !p.wolfSummonCountdown) {
         const ownedTypes = new Set(
             state.beasts.filter(b => b.tamedBy === client.sessionId).map(b => b.key)
         );
         if (ownedTypes.has("wolf") && ownedTypes.has("tiger") && ownedTypes.has("spider")) {
-            for (const b of state.beasts) {
-                if (b.tamedBy === client.sessionId) respawnBeast(b);
-            }
-            p.wolfHp = WOLF_COMPANION_HP;
-            room.broadcast("BEAST_SUMMONED", { sessionId: client.sessionId });
+            p.wolfSummonCountdown = WOLF_SUMMON_DELAY;
+            // Small delay so the client scene has time to restart and register handlers
+            setTimeout(() => {
+                if (state.players[client.sessionId] && p.wolfSummonCountdown > 0) {
+                    client.send("BEAST_SUMMONING", { duration: WOLF_SUMMON_DELAY });
+                }
+            }, 300);
         }
     }
 
-    const prevMap = p.map;
+    // Leaving an interior — cancel any pending summon
+    if (INTERIOR_MAPS.has(prevMap) && !INTERIOR_MAPS.has(data.map)) {
+        p.wolfSummonCountdown = 0;
+    }
+
     p.map = data.map;
 
-    // When returning to town from a building, always spawn at the player's own
-    // team area so they can't end up stuck inside the enemy zone.
+    // When returning to town from a building, always use team spawn
     if (data.map === MAP_TOWN && INTERIOR_MAPS.has(prevMap)) {
         const sp = getTeamSpawn(p.team);
         p.x = sp.x;

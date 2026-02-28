@@ -44,7 +44,8 @@ function buildGameStatePayload(state) {
         map: a.map,
         x: a.x,
         y: a.y,
-        angle: Math.atan2(a.vy, a.vx)
+        angle: Math.atan2(a.vy, a.vx),
+        dmg: a.dmg
     }));
 
     const bossShots = state.bossShots.map((s) => ({
