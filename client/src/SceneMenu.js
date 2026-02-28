@@ -49,7 +49,7 @@ export class SceneMenu extends Phaser.Scene {
         }
 
         // ── Dark overlay covering the bottom half for UI readability ─────────
-        this.add.rectangle(cx, height, width, height * 0.52, 0x0a0f1a, 0.82)
+        this.overlay = this.add.rectangle(cx, height, width, height * 0.52, 0x0a0f1a, 0.82)
             .setOrigin(0.5, 1).setDepth(1);
 
         // ── Name input ───────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ export class SceneMenu extends Phaser.Scene {
         const labelY   = cardY - CARD_H / 2 - 20;
 
         // ── Hunter picker ────────────────────────────────────────────────────
-        this.add.text(pickerXL, labelY, "Hunter", {
+        this.hunterLabel = this.add.text(pickerXL, labelY, "Hunter", {
             fontFamily: "Trebuchet MS", fontSize: "15px",
             color: "#94a3b8", letterSpacing: 1
         }).setOrigin(0.5).setDepth(2);
@@ -105,7 +105,7 @@ export class SceneMenu extends Phaser.Scene {
         });
 
         // ── Bow picker ───────────────────────────────────────────────────────
-        this.add.text(pickerXC, labelY, "Bow", {
+        this.bowPickerLabel = this.add.text(pickerXC, labelY, "Bow", {
             fontFamily: "Trebuchet MS", fontSize: "15px",
             color: "#94a3b8", letterSpacing: 1
         }).setOrigin(0.5).setDepth(2);
@@ -132,7 +132,7 @@ export class SceneMenu extends Phaser.Scene {
         });
 
         // ── Team picker ──────────────────────────────────────────────────────
-        this.add.text(pickerXR, labelY, "Team", {
+        this.teamPickerLabel = this.add.text(pickerXR, labelY, "Team", {
             fontFamily: "Trebuchet MS", fontSize: "15px",
             color: "#94a3b8", letterSpacing: 1
         }).setOrigin(0.5).setDepth(2);
@@ -177,6 +177,18 @@ export class SceneMenu extends Phaser.Scene {
         this.statusText = this.add.text(cx, height - 6, "", {
             fontFamily: "Trebuchet MS", fontSize: "14px", color: "#f87171"
         }).setOrigin(0.5, 1).setDepth(3);
+
+        // ── UI objects for exit animation ────────────────────────────────────
+        this._uiObjects = [
+            this.nameLabel, this.nameBox, this.nameText,
+            this.hunterLabel, this.modelCard, this.modelGlow, this.modelSprite, this.modelLabel,
+            this.modelLeft.box, this.modelLeft.txt, this.modelRight.box, this.modelRight.txt,
+            this.bowPickerLabel, this.bowCard, this.bowGlow, this.bowSprite, this.bowLabel,
+            this.bowLeft.box, this.bowLeft.txt, this.bowRight.box, this.bowRight.txt,
+            this.teamPickerLabel, this.teamCard, this.teamGlow, this.teamNameText, this.teamDot, this.teamSubLabel,
+            this.teamLeft.box, this.teamLeft.txt, this.teamRight.box, this.teamRight.txt,
+            this.joinButton, this.joinText, this.statusText,
+        ];
 
         // ── Init ─────────────────────────────────────────────────────────────
         this.updateNameText();
@@ -272,21 +284,48 @@ export class SceneMenu extends Phaser.Scene {
     }
 
     startGame() {
+        if (this.isConnecting) return;
         this.isConnecting = true;
-        this.statusText.setText("Connecting...");
 
-        const playerProfile = {
-            name:  sanitizePlayerName(this.playerName),
-            model: PLAYER_MODELS[this.selectedModelIndex],
-            bow:   this.selectedBowIndex,
-            team:  this.selectedTeam
-        };
+        // Stop input and cursor blink immediately
+        this.input.keyboard.off("keydown", this.keyHandler);
+        if (this.cursorTimer) { this.cursorTimer.destroy(); this.cursorTimer = null; }
+        this.nameText.setText(this.playerName || "_");
 
-        connectPlayer(playerProfile)
-            .then(() => this.scene.start("bootGame", { playerProfile }))
-            .catch(() => {
-                this.isConnecting = false;
-                this.statusText.setText("Connection failed. Press Enter to retry.");
-            });
+        this.playExitAnimation(() => {
+            const playerProfile = {
+                name:  sanitizePlayerName(this.playerName),
+                model: PLAYER_MODELS[this.selectedModelIndex],
+                bow:   this.selectedBowIndex,
+                team:  this.selectedTeam
+            };
+
+            connectPlayer(playerProfile)
+                .then(() => this.scene.start("bootGame", { playerProfile }))
+                .catch(() => this.scene.restart());
+        });
+    }
+
+    playExitAnimation(onComplete) {
+        const { height } = this.cameras.main;
+
+        // Slide all UI elements down off screen
+        this.tweens.add({
+            targets: this._uiObjects,
+            y: `+=${height * 0.65}`,
+            duration: 600,
+            ease: "Cubic.easeIn",
+        });
+
+        // Fade overlay out at the same time
+        this.tweens.add({
+            targets: this.overlay,
+            alpha: 0,
+            duration: 600,
+            ease: "Cubic.easeIn",
+        });
+
+        // Pause on the bare logo for 500ms, then proceed
+        this.time.delayedCall(1100, onComplete);
     }
 }
