@@ -20,6 +20,7 @@ export class Scene2 extends Phaser.Scene {
 
     init(data) {
         this.mapName = data.map;
+        this.fromMap = data.fromMap || null;
         this.playerTexturePosition = data.playerTexturePosition;
         this.mapSpawn = data.spawn || null;
         this.playerName = (data.playerProfile && data.playerProfile.name) || "Player";
@@ -96,11 +97,28 @@ export class Scene2 extends Phaser.Scene {
         this.worldLayer.setCollisionByProperty({ collides: true });
         this.aboveLayer.setDepth(10);
         this.doorZoneViews = [];
+        this.worldZones = [];
+        this._mapChangeCooldown = 0;
         this.setupInteriorWeb();
 
         let spawnPoint = null;
         if (this.mapSpawn && Number.isFinite(this.mapSpawn.x) && Number.isFinite(this.mapSpawn.y)) {
             spawnPoint = this.mapSpawn;
+        } else if (this.fromMap) {
+            // Coming from another world map — find the SpawnPoint whose 'map' property matches
+            const spLayer = this.map.getObjectLayer("SpawnPoints");
+            const spObjs = spLayer && Array.isArray(spLayer.objects) ? spLayer.objects : [];
+            const fromMap = this.fromMap;
+            const match = spObjs.find((o) =>
+                Array.isArray(o.properties) &&
+                o.properties.some((p) => p.name === "map" && p.value === fromMap)
+            );
+            if (match) {
+                spawnPoint = { x: match.x, y: match.y };
+            } else {
+                const first = spObjs.find((o) => o.name === "Spawn Point");
+                if (first) spawnPoint = { x: first.x, y: first.y };
+            }
         } else {
             const reloadLayer = this.map.getObjectLayer("Reload Area");
             const reloadObj = reloadLayer && Array.isArray(reloadLayer.objects) ? reloadLayer.objects[0] : null;
@@ -124,6 +142,23 @@ export class Scene2 extends Phaser.Scene {
                 .setStrokeStyle(2, 0x1d4ed8, 0.9)
                 .setDepth(11);
             this.doorZoneViews.push(marker);
+        });
+
+        // ── World transition zones (route1, route2, town, etc.) ──────────────
+        const worldsLayer = this.map.getObjectLayer("Worlds");
+        const worldObjs = (worldsLayer && Array.isArray(worldsLayer.objects)) ? worldsLayer.objects : [];
+        worldObjs.forEach((obj) => {
+            if (!obj || !obj.name || !Number.isFinite(obj.x) || !Number.isFinite(obj.y)) return;
+            const w = Number.isFinite(obj.width) && obj.width > 0 ? obj.width : 32;
+            const h = Number.isFinite(obj.height) && obj.height > 0 ? obj.height : 32;
+            const textureProp = Array.isArray(obj.properties)
+                ? obj.properties.find((p) => p.name === "playerTexturePosition")
+                : null;
+            this.worldZones.push({
+                x: obj.x, y: obj.y, w, h,
+                name: obj.name,
+                playerTexturePosition: textureProp ? textureProp.value : "front"
+            });
         });
     }
 
@@ -428,6 +463,7 @@ export class Scene2 extends Phaser.Scene {
         if (this.playerBow) this.playerBow.visible = true;
 
         this.player.update();
+        this.checkWorldZoneTransition();
         this.updateLocalBow();
         this.updateWolfCompanion();
         this.updateSummoningRitual();
@@ -538,6 +574,33 @@ export class Scene2 extends Phaser.Scene {
         }
     }
 
+    checkWorldZoneTransition() {
+        if (!this.player || this.isDead) return;
+        if (this._mapChangeCooldown > 0) {
+            this._mapChangeCooldown -= this.game.loop.delta / 1000;
+            return;
+        }
+        const px = this.player.x;
+        const py = this.player.y;
+        for (const zone of this.worldZones) {
+            if (px >= zone.x && px <= zone.x + zone.w && py >= zone.y && py <= zone.y + zone.h) {
+                this._mapChangeCooldown = 2.0;
+                this.room.then((r) => r.send("PLAYER_CHANGED_MAP", { map: zone.name }));
+                this.scene.restart({
+                    map: zone.name,
+                    fromMap: this.mapName,
+                    playerTexturePosition: zone.playerTexturePosition,
+                    playerProfile: {
+                        name: this.playerName,
+                        model: this.playerModel,
+                        bow: this.playerBowIndex
+                    }
+                });
+                return;
+            }
+        }
+    }
+
     startSummoningRitual(duration) {
         this.clearSummoningRitual();
         // Three orbiting circles: wolf (blue), tiger (orange), spider (purple)
@@ -615,7 +678,7 @@ export class Scene2 extends Phaser.Scene {
         }
 
         const mapChanged = this.lastServerMap !== me.map;
-        if (this.player && this.mapName === me.map && (wasDead !== this.isDead || mapChanged)) {
+        if (this.player && this.mapName === me.map && (!this.lastServerPos || wasDead !== this.isDead || mapChanged)) {
             this.player.setPosition(me.x, me.y);
             this.localDeadX.x = me.x;
             this.localDeadX.y = me.y;

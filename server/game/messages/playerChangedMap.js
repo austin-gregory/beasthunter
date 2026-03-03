@@ -1,7 +1,19 @@
 const INTERIOR_MAPS = new Set(["interior_door_a", "interior_door_b"]);
 const { respawnBeast } = require("../state");
 const { WOLF_COMPANION_HP, MAP_TOWN } = require("../constants");
-const { getTeamSpawn } = require("../maps");
+const { getTeamSpawn, getSpawnPoints } = require("../maps");
+
+// Resolve the entry spawn in `toMap` when coming from `fromMap`.
+// Looks for a SpawnPoint with a 'map' property matching fromMap; falls back to first spawn.
+function getWorldEntrySpawn(toMap, fromMap) {
+    const spawns = getSpawnPoints(toMap);
+    const match = spawns.find((sp) =>
+        sp.properties.some((p) => p.name === "map" && p.value === fromMap)
+    );
+    if (match) return { x: match.x, y: match.y };
+    if (spawns.length) return { x: spawns[0].x, y: spawns[0].y };
+    return null;
+}
 
 const WOLF_SUMMON_DELAY = 15; // seconds
 
@@ -34,11 +46,17 @@ function handlePlayerChangedMap(room, state, client, data) {
 
     p.map = data.map;
 
-    // When returning to town from a building, always use team spawn
+    // Determine spawn position in the new map
     if (data.map === MAP_TOWN && INTERIOR_MAPS.has(prevMap)) {
+        // Returning from a building → team spawn
         const sp = getTeamSpawn(p.team);
         p.x = sp.x;
         p.y = sp.y;
+    } else if (!INTERIOR_MAPS.has(data.map) && !INTERIOR_MAPS.has(prevMap)) {
+        // World-to-world transition (town ↔ route1, town ↔ route2, etc.)
+        // Use the SpawnPoint in the target map that corresponds to the source map
+        const sp = getWorldEntrySpawn(data.map, prevMap);
+        if (sp) { p.x = sp.x; p.y = sp.y; }
     } else if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
         p.x = data.x;
         p.y = data.y;
