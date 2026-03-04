@@ -580,10 +580,12 @@ export class Scene2 extends Phaser.Scene {
             this._mapChangeCooldown -= this.game.loop.delta / 1000;
             return;
         }
-        const px = this.player.x;
-        const py = this.player.y;
+        const body = this.player.body;
+        if (!body) return;
         for (const zone of this.worldZones) {
-            if (px >= zone.x && px <= zone.x + zone.w && py >= zone.y && py <= zone.y + zone.h) {
+            // Use physics body bounds so zones at map edges (within last 32px) are reachable
+            if (body.right >= zone.x && body.left <= zone.x + zone.w &&
+                body.bottom >= zone.y && body.top <= zone.y + zone.h) {
                 this._mapChangeCooldown = 2.0;
                 this.room.then((r) => r.send("PLAYER_CHANGED_MAP", { map: zone.name }));
                 this.scene.restart({
