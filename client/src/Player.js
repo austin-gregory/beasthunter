@@ -92,9 +92,6 @@ export default class Player extends Phaser.GameObjects.Sprite {
         // Player door interaction
         this.doorInteraction();
 
-        // Player world interaction
-        this.worldInteraction();
-
         // Stop any previous movement from the last frame
         this.body.setVelocity(0);
 

@@ -701,55 +701,20 @@ export class Scene2 extends Phaser.Scene {
             seen.add(b.id);
             let view = this.beastViews.get(b.id);
             if (!view) {
-                if (inInterior && b.tamedBy) {
-                    const circle = this.createCircleBeastView(b.x, b.y, b);
-                    const sprite = this.add.sprite(b.x, b.y, "beast-wolf").setScale(1.8).setDepth(6);
-                    sprite.visible = false;
-                    view = {
-                        type: "circle",
-                        body: circle.body,
-                        eyeLeft: circle.eyeLeft,
-                        eyeRight: circle.eyeRight,
-                        mouth: circle.mouth,
-                        armLeft: circle.armLeft,
-                        armRight: circle.armRight,
-                        hpBack: circle.hpBack,
-                        hpFill: circle.hpFill,
-                        tameDots: circle.tameDots,
-                        phase: circle.phase,
-                        pendingWolf: sprite,
-                        transformed: false
-                    };
-                    this.time.delayedCall(5000, () => {
-                        if (!view || view.transformed) return;
-                        if (!this.beastViews.has(b.id)) return;
-                        if (!view.pendingWolf || !view.pendingWolf.anims) return;
-                        this.spawnTransformFx(b.x, b.y);
-                        this.cameraShake();
-                        this.spawnSummonText();
-                        this.hideCircleView(view);
-                        view.pendingWolf.visible = true;
-                        view.pendingWolf.play("beast-wolf-walk");
-                        view.type = "wolf";
-                        view.sprite = view.pendingWolf;
-                        view.transformed = true;
-                    });
-                } else {
-                    const circle = this.createCircleBeastView(b.x, b.y, b);
-                    view = {
-                        type: "circle",
-                        body: circle.body,
-                        eyeLeft: circle.eyeLeft,
-                        eyeRight: circle.eyeRight,
-                        mouth: circle.mouth,
-                        armLeft: circle.armLeft,
-                        armRight: circle.armRight,
-                        hpBack: circle.hpBack,
-                        hpFill: circle.hpFill,
-                        tameDots: circle.tameDots,
-                        phase: circle.phase
-                    };
-                }
+                const circle = this.createCircleBeastView(b.x, b.y, b);
+                view = {
+                    type: "circle",
+                    body: circle.body,
+                    eyeLeft: circle.eyeLeft,
+                    eyeRight: circle.eyeRight,
+                    mouth: circle.mouth,
+                    armLeft: circle.armLeft,
+                    armRight: circle.armRight,
+                    hpBack: circle.hpBack,
+                    hpFill: circle.hpFill,
+                    tameDots: circle.tameDots,
+                    phase: circle.phase
+                };
                 this.beastViews.set(b.id, view);
             }
 
