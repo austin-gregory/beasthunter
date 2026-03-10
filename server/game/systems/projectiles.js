@@ -61,6 +61,12 @@ function simulateArrows(state, dt) {
 
             if (Math.hypot(p.x - a.x, p.y - a.y) > PLAYER_RADIUS + ARROW_RADIUS) continue;
 
+            // Tiger shield absorbs hit before player HP
+            if (p.tigerHp > 0) {
+                p.tigerHp = Math.max(0, p.tigerHp - a.dmg);
+                hit = true; break;
+            }
+
             p.hp -= a.dmg;
             if (p.hp <= 0) {
                 killPlayer(state, p, { respawnMap: MAP_TOWN });

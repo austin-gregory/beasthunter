@@ -14,8 +14,9 @@ function buildGameStatePayload(state) {
         score: p.score,
         dead: !!p.dead,
         team:   p.team   || 0,
-        wolfHp: p.wolfHp || 0,
-        dir:    p.dir    || "front"
+        wolfHp:  p.wolfHp  || 0,
+        tigerHp: p.tigerHp || 0,
+        dir:     p.dir     || "front"
     }));
 
     const beasts = state.beasts.map((b) => ({

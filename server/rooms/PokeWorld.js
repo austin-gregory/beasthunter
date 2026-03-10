@@ -7,7 +7,7 @@ const {
     PLAYER_MAX_AMMO
 } = require("../game/constants");
 const { createState, allocateSlot, spawnBeasts, spawnBosses, spawnBots, releasePlayerTames, respawnBeast } = require("../game/state");
-const { WOLF_COMPANION_HP } = require("../game/constants");
+const { WOLF_COMPANION_HP, TIGER_COMPANION_HP } = require("../game/constants");
 const { updateBots } = require("../game/systems/bots");
 const { getTeamSpawn } = require("../game/maps");
 const { updatePlayers } = require("../game/systems/players");
@@ -67,6 +67,8 @@ exports.PokeWorld = class extends colyseus.Room {
             team,
             wolfHp: 0,
             wolfSummonCountdown: 0,
+            tigerHp: 0,
+            tigerSummonCountdown: 0,
             dir: "front",
             dead: false,
             bow
@@ -99,16 +101,32 @@ exports.PokeWorld = class extends colyseus.Room {
 
     _tickWolfSummons(dt) {
         for (const p of Object.values(this.gameState.players)) {
-            if (!p.wolfSummonCountdown || p.wolfSummonCountdown <= 0) continue;
-            p.wolfSummonCountdown -= dt;
-            if (p.wolfSummonCountdown <= 0) {
-                p.wolfSummonCountdown = 0;
-                const myBeasts = this.gameState.beasts.filter(b => b.tamedBy === p.sessionId);
-                const ownedTypes = new Set(myBeasts.map(b => b.key));
-                if (ownedTypes.has("wolf") && ownedTypes.has("tiger") && ownedTypes.has("spider")) {
-                    for (const b of myBeasts) respawnBeast(b);
-                    p.wolfHp = WOLF_COMPANION_HP;
-                    this.broadcast("BEAST_SUMMONED", { sessionId: p.sessionId });
+            // Wolf summon countdown
+            if (p.wolfSummonCountdown > 0) {
+                p.wolfSummonCountdown -= dt;
+                if (p.wolfSummonCountdown <= 0) {
+                    p.wolfSummonCountdown = 0;
+                    const myBeasts = this.gameState.beasts.filter(b => b.tamedBy === p.sessionId);
+                    const ownedTypes = new Set(myBeasts.map(b => b.key));
+                    if (ownedTypes.has("wolf") && ownedTypes.has("tiger") && ownedTypes.has("spider")) {
+                        for (const b of myBeasts) respawnBeast(b);
+                        p.wolfHp = WOLF_COMPANION_HP;
+                        this.broadcast("BEAST_SUMMONED", { sessionId: p.sessionId, companion: "wolf" });
+                    }
+                }
+            }
+            // Tiger summon countdown
+            if (p.tigerSummonCountdown > 0) {
+                p.tigerSummonCountdown -= dt;
+                if (p.tigerSummonCountdown <= 0) {
+                    p.tigerSummonCountdown = 0;
+                    const myBeasts = this.gameState.beasts.filter(b => b.tamedBy === p.sessionId);
+                    const ownedTypes = new Set(myBeasts.map(b => b.key));
+                    if (ownedTypes.has("wolf") && ownedTypes.has("tiger") && ownedTypes.has("spider")) {
+                        for (const b of myBeasts) respawnBeast(b);
+                        p.tigerHp = TIGER_COMPANION_HP;
+                        this.broadcast("BEAST_SUMMONED", { sessionId: p.sessionId, companion: "tiger" });
+                    }
                 }
             }
         }

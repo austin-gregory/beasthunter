@@ -169,6 +169,7 @@ function respawnPlayer(state, player) {
     player.dir = "front";
     player.dead = false;
     player.wolfHp = 0;
+    player.tigerHp = 0;
     releasePlayerTames(state, player.sessionId);
 }
 

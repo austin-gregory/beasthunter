@@ -10,6 +10,7 @@ import PlayersAtlasJSON from "./assets/atlas/players";
 import PlayersAtlasPNG from "./assets/images/players/players.png";
 import BeastWolfPNG from "./assets/images/wolf_gray_full.png";
 import BeastTigerPNG from "./assets/images/OrangeTabby-Idle.png";
+import BeastTigerRunPNG from "./assets/images/OrangeTabby-Run.png";
 import BeastSpiderPNG from "./assets/images/spider.png";
 import BowPackPNG from "./assets/images/Bow Pack Black.png";
 import ArrowPNG from "./assets/images/arrow.png";
@@ -40,7 +41,8 @@ export class Scene1 extends Phaser.Scene {
         this.load.atlas("players", PlayersAtlasPNG, PlayersAtlasJSON);
         this.load.spritesheet("bows", BowPackPNG, { frameWidth: 24, frameHeight: 24 });
         this.load.spritesheet("beast-wolf", BeastWolfPNG, { frameWidth: 32, frameHeight: 36 });
-        this.load.image("beast-tiger", BeastTigerPNG);
+        this.load.spritesheet("beast-tiger", BeastTigerPNG, { frameWidth: 48, frameHeight: 48 });
+        this.load.spritesheet("beast-tiger-run", BeastTigerRunPNG, { frameWidth: 48, frameHeight: 48 });
         this.load.image("beast-spider", BeastSpiderPNG);
         this.load.image("arrow", ArrowPNG);
         this.load.image("spiderweb", SpiderwebPNG);
@@ -118,6 +120,22 @@ export class Scene1 extends Phaser.Scene {
                 key: "beast-wolf-walk",
                 frames: this.anims.generateFrameNumbers("beast-wolf", { start: 0, end: 5 }),
                 frameRate: 8,
+                repeat: -1
+            });
+        }
+        if (!this.anims.exists("beast-tiger-idle")) {
+            this.anims.create({
+                key: "beast-tiger-idle",
+                frames: this.anims.generateFrameNumbers("beast-tiger", { start: 0, end: 11 }),
+                frameRate: 10,
+                repeat: -1
+            });
+        }
+        if (!this.anims.exists("beast-tiger-run")) {
+            this.anims.create({
+                key: "beast-tiger-run",
+                frames: this.anims.generateFrameNumbers("beast-tiger-run", { start: 0, end: 5 }),
+                frameRate: 10,
                 repeat: -1
             });
         }

@@ -263,6 +263,26 @@
         letter-spacing: 0.5px;
       }
 
+      /* ── Debug Console ───────────────────── */
+      #debug-console {
+        margin: 8px 10px 10px;
+        display: flex;
+        gap: 6px;
+      }
+      #debug-input {
+        flex: 1;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        color: #94a3b8;
+        font-family: monospace;
+        font-size: 11px;
+        padding: 4px 7px;
+        outline: none;
+      }
+      #debug-input::placeholder { color: #475569; }
+      #debug-input:focus { border-color: #60a5fa; }
+
       /* ── Death Overlay ───────────────────── */
       #death-overlay {
         position: absolute;
@@ -407,6 +427,10 @@
           <div class="hud-control"><span class="ctrl-key">SHIFT</span> Tame nearby weakened beast</div>
           <div class="hud-control"><span class="ctrl-key">E / ↵</span> Use door</div>
           <div class="hud-control">Heal &amp; reload in your team area</div>
+        </div>
+
+        <div id="debug-console">
+          <input id="debug-input" type="text" placeholder="/debugwolf  /debugtiger" autocomplete="off" spellcheck="false">
         </div>
 
       </aside>

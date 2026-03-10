@@ -29,7 +29,7 @@ export class Scene2 extends Phaser.Scene {
             ? data.playerProfile.bow
             : 0;
 
-        this.localStats = { hp: 100, ammo: 0, score: 0, wolfHp: 0, team: 0 };
+        this.localStats = { hp: 100, ammo: 0, score: 0, wolfHp: 0, tigerHp: 0, team: 0 };
         this.team1Score = 0;
         this.team2Score = 0;
         this.wolfSprite = null;
@@ -72,7 +72,29 @@ export class Scene2 extends Phaser.Scene {
         this.setupHudRefs();
         this.setupNetworking();
 
+        // --- DEBUG CONSOLE (remove before release) ---
+        const debugInput = document.getElementById("debug-input");
+        if (debugInput) {
+            const commands = {
+                "/debugwolf":  () => { this._debugWolfHp  = this._debugWolfHp  > 0 ? 0 : 100; return `wolfHp → ${this._debugWolfHp}`; },
+                "/debugtiger": () => { this._debugTigerHp = this._debugTigerHp > 0 ? 0 : 80;  return `tigerHp → ${this._debugTigerHp}`; },
+            };
+            this._debugKeyHandler = (e) => {
+                if (e.key !== "Enter") return;
+                const cmd = debugInput.value.trim().toLowerCase();
+                debugInput.value = "";
+                const fn = commands[cmd];
+                debugInput.placeholder = fn ? fn() : `unknown: ${cmd}`;
+                debugInput.blur();
+            };
+            debugInput.addEventListener("keydown", this._debugKeyHandler);
+            // Stop WASD etc. from firing while typing
+            debugInput.addEventListener("focus",  () => this.input.keyboard.disableGlobalCapture());
+            debugInput.addEventListener("blur",   () => this.input.keyboard.enableGlobalCapture());
+        }
         this.events.once("shutdown", () => {
+            if (debugInput && this._debugKeyHandler)
+                debugInput.removeEventListener("keydown", this._debugKeyHandler);
             if (this.socketInterval) {
                 clearInterval(this.socketInterval);
                 this.socketInterval = null;
@@ -190,6 +212,14 @@ export class Scene2 extends Phaser.Scene {
             this.wolfSprite.visible = false;
             if (this.anims.exists("beast-wolf-walk")) this.wolfSprite.play("beast-wolf-walk");
         }
+
+        if (this.textures.exists("beast-tiger")) {
+            this.tigerSprite = this.add.sprite(0, 0, "beast-tiger").setScale(0.9).setDepth(4);
+            this.tigerSprite.visible = false;
+            if (this.anims.exists("beast-tiger-idle")) this.tigerSprite.play("beast-tiger-idle");
+        }
+
+        this.shieldGraphics = this.add.graphics().setDepth(3);
 
         const camera = this.cameras.main;
         camera.startFollow(this.player);
@@ -466,6 +496,7 @@ export class Scene2 extends Phaser.Scene {
         this.checkWorldZoneTransition();
         this.updateLocalBow();
         this.updateWolfCompanion();
+        this.updateTigerCompanion();
         this.updateSummoningRitual();
         for (const remote of Object.values(onlinePlayers)) {
             if (remote && remote.map === this.mapName && typeof remote.updateRemote === "function") {
@@ -552,15 +583,27 @@ export class Scene2 extends Phaser.Scene {
     updateWolfCompanion() {
         if (!this.wolfSprite || !this.player) return;
         const wolfHp = this.localStats && this.localStats.wolfHp || 0;
+        const wasVisible = this.wolfSprite.visible;
         this.wolfSprite.visible = wolfHp > 0 && !this.isDead;
         if (this.wolfSprite.visible) {
             const facing = this.player.facing || "front";
             const offsets = { left: { x: 1, y: 0 }, right: { x: -1, y: 0 }, back: { x: 0, y: 1 }, front: { x: 0, y: -1 } };
             const o = offsets[facing] || offsets.front;
-            this.wolfSprite.setPosition(
-                this.player.x + o.x * 48,
-                this.player.y + o.y * 48
-            );
+            const targetX = this.player.x + o.x * 48;
+            const targetY = this.player.y + o.y * 48;
+
+            if (!wasVisible) {
+                // Snap to position on first appearance so wolf doesn't fly in from (0,0)
+                this.wolfSprite.setPosition(targetX, targetY);
+            } else {
+                // Smooth follow: ~20% of remaining distance per frame at 60fps
+                const dt = this.game.loop.delta / 1000;
+                const t = 1 - Math.pow(0.8, dt * 60);
+                this.wolfSprite.x += (targetX - this.wolfSprite.x) * t;
+                this.wolfSprite.y += (targetY - this.wolfSprite.y) * t;
+            }
+
+            this.wolfSprite.setFlipX(facing === "left");
 
             const vel = this.player.body && this.player.body.velocity;
             const isMoving = vel && (Math.abs(vel.x) > 1 || Math.abs(vel.y) > 1);
@@ -574,6 +617,54 @@ export class Scene2 extends Phaser.Scene {
         }
     }
 
+    updateTigerCompanion() {
+        if (!this.player) return;
+        const tigerHp = this.localStats && this.localStats.tigerHp || 0;
+
+        // --- Tiger sprite ---
+        if (this.tigerSprite) {
+            const wasVisible = this.tigerSprite.visible;
+            this.tigerSprite.visible = tigerHp > 0 && !this.isDead;
+            if (this.tigerSprite.visible) {
+                const facing = this.player.facing || "front";
+                // Wolf sits directly behind; tiger sits to the side behind
+                const fwd = { left: { x: 1, y: 0 }, right: { x: -1, y: 0 }, back: { x: 0, y: 1 }, front: { x: 0, y: -1 } };
+                const f = fwd[facing] || fwd.front;
+                // Perpendicular: rotate f 90° → (-f.y, f.x)
+                const perp = { x: -f.y, y: f.x };
+                const targetX = this.player.x + f.x * 32 + perp.x * 28;
+                const targetY = this.player.y + f.y * 32 + perp.y * 28;
+                if (!wasVisible) {
+                    this.tigerSprite.setPosition(targetX, targetY);
+                } else {
+                    const dt = this.game.loop.delta / 1000;
+                    const t = 1 - Math.pow(0.8, dt * 60);
+                    this.tigerSprite.x += (targetX - this.tigerSprite.x) * t;
+                    this.tigerSprite.y += (targetY - this.tigerSprite.y) * t;
+                }
+                this.tigerSprite.setFlipX(facing === "left");
+                const vel = this.player.body && this.player.body.velocity;
+                const isMoving = vel && (Math.abs(vel.x) > 1 || Math.abs(vel.y) > 1);
+                const targetAnim = isMoving ? "beast-tiger-run" : "beast-tiger-idle";
+                if (this.tigerSprite.anims.currentAnim?.key !== targetAnim && this.anims.exists(targetAnim)) {
+                    this.tigerSprite.play(targetAnim);
+                }
+            }
+        }
+
+        // --- Bubble shield ---
+        if (this.shieldGraphics) {
+            this.shieldGraphics.clear();
+            if (tigerHp > 0 && !this.isDead) {
+                const pulse = 0.6 + 0.4 * Math.sin(this.time.now / 300);
+                this.shieldGraphics.lineStyle(3, 0xfb923c, 0.7 * pulse);
+                this.shieldGraphics.strokeCircle(this.player.x, this.player.y, 28);
+                this.shieldGraphics.lineStyle(1, 0xffd580, 0.3 * pulse);
+                this.shieldGraphics.strokeCircle(this.player.x, this.player.y, 32);
+            }
+        }
+    }
+
     checkWorldZoneTransition() {
         if (!this.player || this.isDead) return;
         if (this._mapChangeCooldown > 0) {
@@ -582,10 +673,20 @@ export class Scene2 extends Phaser.Scene {
         }
         const body = this.player.body;
         if (!body) return;
+        const mapH = this.map ? this.map.heightInPixels : Infinity;
+        const mapW = this.map ? this.map.widthInPixels : Infinity;
         for (const zone of this.worldZones) {
-            // Use physics body bounds so zones at map edges (within last 32px) are reachable
-            if (body.right >= zone.x && body.left <= zone.x + zone.w &&
-                body.bottom >= zone.y && body.top <= zone.y + zone.h) {
+            const inXRange = body.right >= zone.x && body.left <= zone.x + zone.w;
+            const inYRange = body.bottom >= zone.y && body.top <= zone.y + zone.h;
+            // For zones that start off-map (edge < 0), expand detection to one tile width
+            const atTopEdge  = zone.y < 0            && body.top  < Math.max(zone.y + zone.h, 32);
+            const atLeftEdge = zone.x < 0            && body.left < Math.max(zone.x + zone.w, 32);
+            const atRightEdge = zone.x + zone.w > mapW && body.right > Math.min(zone.x, mapW - 32);
+            const triggered = (inXRange && inYRange) ||
+                (atTopEdge   && inXRange) ||
+                (atLeftEdge  && body.bottom >= zone.y && body.top <= zone.y + zone.h) ||
+                (atRightEdge && body.bottom >= zone.y && body.top <= zone.y + zone.h);
+            if (triggered) {
                 this._mapChangeCooldown = 2.0;
                 this.room.then((r) => r.send("PLAYER_CHANGED_MAP", { map: zone.name }));
                 this.scene.restart({
@@ -658,6 +759,7 @@ export class Scene2 extends Phaser.Scene {
         this.localStats.ammo = me.ammo;
         this.localStats.score = me.score;
         this.localStats.wolfHp = me.wolfHp || 0;
+        this.localStats.tigerHp = me.tigerHp || 0;
         this.localStats.team = me.team || 0;
         this.isDead = !!me.dead;
 
